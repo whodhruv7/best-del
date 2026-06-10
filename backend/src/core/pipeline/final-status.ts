@@ -39,6 +39,13 @@ export function decideFinalResearchStatus(input: DecideFinalResearchStatusInput)
   );
   const failedSourceUsageRoles = (input.sourceUsageFailureReports ?? []).length > 0;
   const answerLooksLikeFallback = Boolean(input.visibleAnswer && /\bLegacy fallback answer retained|Research Incomplete|Core generation could not produce/i.test(input.visibleAnswer));
+  const sourceUsageFailuresRecoveredWithGap =
+    failedSourceUsageRoles
+    && input.deterministicCitedFallbackUsed === true
+    && Boolean(input.sourceGapReport)
+    && citedSources > 0
+    && !automaticFatalFailure
+    && !answerLooksLikeFallback;
 
   if (input.providerError) {
     return input.degradedFallbackUsed ? "legacy_fallback_used" : "provider_error";
@@ -71,7 +78,7 @@ export function decideFinalResearchStatus(input: DecideFinalResearchStatusInput)
     && input.sourceContract.passed === true
     && citedSources > 0
     && !automaticFatalFailure
-    && !failedSourceUsageRoles
+    && (!failedSourceUsageRoles || sourceUsageFailuresRecoveredWithGap)
     && !answerLooksLikeFallback
   ) {
     return "completed_with_source_gaps";
@@ -80,7 +87,7 @@ export function decideFinalResearchStatus(input: DecideFinalResearchStatusInput)
   if (repairRequired && input.sourceContract.status !== "passed_with_source_gaps") return "failed";
   if (qualityFailed && input.sourceContract.status !== "passed_with_source_gaps") return "failed";
   if (qualityFailed && automaticFatalFailure) return "failed";
-  if (failedSourceUsageRoles && input.sourceContract.status !== "passed_with_source_gaps") return "failed";
+  if (failedSourceUsageRoles && input.sourceContract.status !== "passed_with_source_gaps" && !sourceUsageFailuresRecoveredWithGap) return "failed";
   if (answerLooksLikeFallback && !input.legacyFallbackUsed) return "failed";
 
   if (input.legacyFallbackUsed) {

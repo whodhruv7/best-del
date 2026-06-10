@@ -31,7 +31,6 @@ import {
   PromptBudgetPanel,
   ProviderRuntimePanel,
   QualityGatePanel,
-  RetrievalCachePanel,
   SourceContractPanel,
   SourceListPanel,
   StatusBadge,
@@ -326,6 +325,54 @@ function collectPromptBudgetReports(events: CorePipelineEventSummary[]): PromptB
     }
   }
   return reports;
+}
+
+// ── User-facing pipeline event filter ───────────────────────────────────────
+// Only show events that are meaningful to end-users. Hide all internal
+// implementation details like cache mechanics, cooldowns, and technical checks.
+const USER_FACING_EVENT_TYPES = new Set([
+  // Planning & Strategy
+  "request_received",
+  "agenda_contract_created",
+  "archive_safety_checked",
+  "source_bucket_plan_created",
+  "research_angles_generated",
+  "archive_routing_completed",
+  // Source Discovery Progress
+  "bucket_search_started",
+  "bucket_search_completed",
+  "source_dedup_completed",
+  "source_filter_completed",
+  "source_scoring_completed",
+  "source_enrichment_started",
+  "source_enrichment_completed",
+  // Evidence & Citation
+  "evidence_registry_created",
+  "evidence_pack_created",
+  "citation_audit_started",
+  "hallucination_audit_started",
+  // Model Progress
+  "model_role_started",
+  "model_role_completed",
+  "source_usage_started",
+  "source_usage_completed",
+  "dimension_engine_completed",
+  "division_outputs_ready",
+  // Quality & Completion
+  "quality_gate_completed",
+  "synthesis_started",
+  "final_answer_ready",
+  "completed",
+  "completed_with_source_gaps",
+  // Errors (user should see these)
+  "pipeline_failed",
+  "failed",
+  "cancelled",
+  "provider_error",
+]);
+
+function isUserFacingEvent(eventType: string): boolean {
+  return USER_FACING_EVENT_TYPES.has(eventType);
 }
 
 function pipelineCheckClass(type: string): string {
@@ -994,7 +1041,9 @@ export function ResearchPipeline({
         judgement: source.judgement,
       })))
     : dedupeSourceResults(Object.values(customModelFound).flat());
-  const recentCoreEvents = corePipelineEvents.slice(-4).reverse();
+  // Filter to only user-facing events - hide internal cache/cooldown/stale events
+  const userFacingEvents = corePipelineEvents.filter((event) => isUserFacingEvent(event.type));
+  const recentCoreEvents = userFacingEvents.slice(-4).reverse();
   const promptBudgetReports = useMemo(() => collectPromptBudgetReports(corePipelineEvents), [corePipelineEvents]);
   const latestPromptBudgetReport = promptBudgetReports.at(-1) ?? null;
   const cleanStreamingAnswer = useMemo(() => cleanMessageContent(streamingAnswer), [streamingAnswer]);
@@ -1735,7 +1784,6 @@ export function ResearchPipeline({
               </div>
             )}
             <PromptBudgetPanel report={latestPromptBudgetReport} />
-            <RetrievalCachePanel events={corePipelineEvents} />
             <ProviderRuntimePanel events={corePipelineEvents} selectedModels={activeModels} legacyFallbackUsed={legacyFallbackUsed} />
           </div>
           {researchAngles.length > 0 && (

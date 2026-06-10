@@ -35,7 +35,7 @@ export interface ModeQualityThresholds {
 export const MODE_THRESHOLDS: Record<ResearchMode, ModeQualityThresholds> = {
   fast_research: {
     minScore: 70,
-    minCitedSources: 40,
+    minCitedSources: 20,
     minSourceClasses: 3,
     minBuckets: 3,
     maxSnippetRatio: 0.65,

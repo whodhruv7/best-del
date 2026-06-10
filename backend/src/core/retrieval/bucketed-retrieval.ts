@@ -8,6 +8,8 @@ import { filterSourcesForAgenda } from "./source-filter.js";
 import { scoreSourceForAgenda } from "./source-scoring.js";
 import { RetrievalError, runSearchPlan, type RawSearchResult, type SearchExecutionOptions } from "./search-executor.js";
 import type { BucketedQueryPlan } from "./query-planner.js";
+import { logger } from "../../lib/logger.js";
+import { multiKeyFetch } from "../../lib/multi-key-fetch.js";
 import type { SourceBucketId } from "./source-buckets.js";
 import { buildMultiHopExpansion } from "./multi-hop-expander.js";
 import { shouldStopRetrievalEarly } from "./early-stopping.js";
@@ -96,7 +98,7 @@ export function modeRetrievalOptions(mode: ResearchMode): Required<Pick<Bucketed
 
 export async function runBucketedRetrieval(plan: BucketedQueryPlan, options: BucketedRetrievalOptions = {}): Promise<BucketedRetrievalResult> {
   const modeDefaults = modeRetrievalOptions(options.mode ?? "deep_research");
-  const mergedOptions = { ...modeDefaults, ...options };
+  const mergedOptions = { ...modeDefaults, enrichFetchFn: multiKeyFetch, ...options };
   const providerErrors: string[] = [];
   const enrichmentFailures: string[] = [];
   const cacheEvent = (event: string, data: Record<string, unknown>) => mergedOptions.emit?.({ type: event, data });

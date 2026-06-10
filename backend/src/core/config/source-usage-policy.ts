@@ -17,9 +17,9 @@ export function getSourceUsagePolicy(mode: SourceUsagePolicyMode): SourceUsagePo
     case "web_search":
     case "fast_research":
       return {
-        requiredSources: 40,
-        perRoleMinimum: 12,
-        minimumToProceed: 40,
+        requiredSources: 20,
+        perRoleMinimum: 6,
+        minimumToProceed: 20,
         strictFailure: false,
         allowCompletedWithSourceGaps: true,
         allowDeterministicExtractionFallback: true,

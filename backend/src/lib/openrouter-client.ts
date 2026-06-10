@@ -3,6 +3,7 @@
 // OpenRouter provider — proxies 100+ models via OpenAI-compat API.
 // ─────────────────────────────────────────────────────────────
 import OpenAI from "openai";
+import { multiKeyFetch } from "./multi-key-fetch.js";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -37,6 +38,7 @@ export function getOpenRouterClient(apiKey?: string | null): OpenAI {
   return new OpenAI({
     apiKey: key,
     baseURL: OPENROUTER_BASE_URL,
+    fetch: multiKeyFetch as any,
     defaultHeaders: {
       "HTTP-Referer": process.env.APP_URL ?? "https://bestdel.replit.app",
       "X-Title": "BestDel MUN Research Engine",

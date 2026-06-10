@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { 
-  listArchives, 
+  listArchives as listArchivesDb, 
   createArchive as createArchiveDb, 
   updateArchive as updateArchiveDb,
   getArchiveById,
@@ -10,6 +10,7 @@ import {
   countArchives,
   countConversationsByArchiveId,
   getArchiveResearchAngles,
+  listArchiveResearchAngles,
   upsertArchiveResearchAngles,
   toApiArchive,
   type ApiArchiveRecord,
@@ -154,21 +155,25 @@ async function generateAngles(topic: string, committee?: string): Promise<{ angl
 
 const supabaseArchivesStore: ArchivesStore = {
   async listArchives() {
-    const rows = await listArchives();
-    const anglesPromises = rows.map(async (row) => {
-      const anglesData = await getArchiveResearchAngles(row.id);
+    const rows = await listArchivesDb();
+    const anglesByArchiveId = new Map(
+      (await listArchiveResearchAngles(rows.map((row) => row.id)))
+        .map((angles) => [angles.archive_id, angles] as const),
+    );
+    return rows.map((row) => {
+      const angles = anglesByArchiveId.get(row.id);
       return {
         ...toApiArchive(row),
-        researchAngles: anglesData ? parseJsonArray(anglesData.angles_json) : [],
+        researchAngles: parseJsonArray(angles?.angles_json ?? '[]'),
       };
     });
-    return Promise.all(anglesPromises);
   },
   async createArchive(input) {
     try {
       const archive = await createArchiveDb(input.name, input.topic);
-      // Initialize related records
-      await upsertArchiveResearchAngles(archive.id, [], {});
+      void upsertArchiveResearchAngles(archive.id, [], {}).catch((err) => {
+        console.error("[archives] Failed to initialize research angles:", err);
+      });
       return toApiArchive(archive);
     } catch (err) {
       console.error("[archives] createArchive failed:", err);

@@ -8,6 +8,7 @@ import type { ExtractorProviderName, SearchOnlyProviderName } from "../search/se
 import { retrievalCacheManager } from "../retrieval-cache/index.js";
 import type { ResearchMode } from "../config/research-mode.js";
 import { logger } from "../../lib/logger.js";
+import { multiKeyFetch } from "../../lib/multi-key-fetch.js";
 
 export class RetrievalError extends Error {
   constructor(
@@ -138,7 +139,7 @@ export async function runSearchPlan(plan: BucketedQueryPlan, options: SearchExec
           const items = await withRetries(
             () => callSearchProvider(provider, query.query, providerKey, {
               queryOverride: providerQuery,
-              fetchFn: options.fetchFn ?? fetch,
+              fetchFn: options.fetchFn ?? multiKeyFetch,
               timeoutMs: options.timeoutMs ?? query.timeoutMs,
               abortSignal: options.abortSignal,
               maxResults: options.maxResultsPerQuery ?? query.maxResultsPerQuery,

@@ -6,6 +6,7 @@ import {
   FileText,
   Landmark,
   Loader2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -117,7 +118,7 @@ export function summarizeResearchRunSidebar(input: ResearchRunSidebarSummaryInpu
   };
 }
 
-export function ResearchRunSidebar({ summary }: { summary: ResearchRunSidebarSummary }) {
+export function ResearchRunSidebar({ summary, onClose }: { summary: ResearchRunSidebarSummary; onClose?: () => void }) {
   // Fix (Bug: L90): only spin when status is actually "running", not repairing or idle
   const isSpinning = summary.runStatus === "running";
   const statusIcon = summary.statusSeverity === "error"
@@ -147,16 +148,29 @@ export function ResearchRunSidebar({ summary }: { summary: ResearchRunSidebarSum
                 {summary.archiveName}
               </p>
             </div>
-            <span className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold",
-              summary.statusSeverity === "success" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-              summary.statusSeverity === "warning" && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-              summary.statusSeverity === "error" && "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
-              summary.statusSeverity === "info" && "border-slate-500/25 bg-slate-500/10 text-slate-700 dark:text-slate-200",
-            )}>
-              <StatusIcon className={cn("h-3 w-3", isSpinning && "animate-spin")} />
-              {summary.statusLabel}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold",
+                summary.statusSeverity === "success" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                summary.statusSeverity === "warning" && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                summary.statusSeverity === "error" && "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
+                summary.statusSeverity === "info" && "border-slate-500/25 bg-slate-500/10 text-slate-700 dark:text-slate-200",
+              )}>
+                <StatusIcon className={cn("h-3 w-3", isSpinning && "animate-spin")} />
+                {summary.statusLabel}
+              </span>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/50 bg-background/80 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Close live research run"
+                  data-testid="button-close-live-research"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Fix (Bug: L121): use min-w-0 and truncate to prevent 3-digit numbers from wrapping */}

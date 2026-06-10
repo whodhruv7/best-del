@@ -1281,6 +1281,11 @@ html { scroll-behavior: smooth; }
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 45%, transparent 55%);
 }
 
+.topbar-status-pill {
+  min-height: 2.25rem;
+  white-space: nowrap;
+}
+
 .status-pill-ready {
   border: 1px solid color-mix(in srgb, #22c55e 42%, transparent 58%);
   color: #047857;
@@ -1394,11 +1399,29 @@ html { scroll-behavior: smooth; }
   .cursor-glint {
     display: none;
   }
+
+  .msg-timestamp {
+    opacity: 0.58;
+  }
 }
 
 body {
   background: var(--bg-shell);
   color: var(--text-primary-hex);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bestdel-app-shell {
+  min-height: 100dvh;
+  max-width: 100vw;
+  touch-action: manipulation;
 }
 
 html.dark body,
@@ -1520,11 +1543,63 @@ html.dark header {
   animation: heroGlowIn 620ms var(--ease-out-expo) 80ms both;
 }
 
+.assistant-bubble,
+.feature-card,
+.command-dock {
+  overflow-wrap: anywhere;
+}
+
 .hero-rule {
   width: min(20rem, 72vw);
   height: 1px;
   margin-top: 1.35rem;
   background: linear-gradient(90deg, rgba(59, 111, 212, 0.58), rgba(212, 160, 59, 0.22), transparent);
+}
+
+@media (max-width: 640px) {
+  h1, h2, h3 {
+    letter-spacing: 0;
+  }
+
+  .bestdel-hero-glow::before {
+    top: -48px;
+    left: 50%;
+    width: min(420px, 94vw);
+    height: 280px;
+    transform: translateX(-50%);
+    opacity: 0.78;
+  }
+
+  .hero-rule {
+    width: min(15rem, 66vw);
+    margin-top: 1rem;
+  }
+
+  .feature-card {
+    border-left-width: 2px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+  }
+
+  .feature-card:hover {
+    transform: none;
+  }
+
+  .status-pill-ready,
+  .status-pill-degraded {
+    gap: 0.38rem;
+    padding: 0.36rem 0.55rem;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+  }
+
+  .prose,
+  .whitespace-pre-wrap {
+    font-size: 14px;
+    line-height: 1.68;
+  }
 }
 
 .command-dock {

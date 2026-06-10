@@ -9,48 +9,15 @@ interface ProviderRuntimePanelProps {
 export function ProviderRuntimePanel({ events = [], selectedModels = [], legacyFallbackUsed = false }: ProviderRuntimePanelProps) {
   const runtime = collectProviderRuntime(events);
   const effectiveModels = runtime.effectiveModels.length > 0 ? runtime.effectiveModels : selectedModels;
-  const warnings = [...runtime.warnings, ...(legacyFallbackUsed ? ["Legacy fallback used"] : [])];
-  const shouldRender = effectiveModels.length > 0 || warnings.length > 0 || runtime.errors.length > 0 || runtime.fallbacks.length > 0 || runtime.cooldowns.length > 0 || runtime.searchProviders.length > 0 || runtime.extractionProviders.length > 0;
-  if (!shouldRender) return null;
+  // Only show models - hide all internal provider/runtime details per user requirements
+  if (effectiveModels.length === 0) return null;
 
   return (
     <div className="rounded-lg border border-border/40 bg-background/70 p-2.5">
-      <p className="text-[10px] font-semibold text-muted-foreground">Provider Runtime</p>
+      <p className="text-[10px] font-semibold text-muted-foreground">Model Progress</p>
       {effectiveModels.length > 0 && (
         <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground break-all">
           Models: {effectiveModels.join(", ")}
-        </p>
-      )}
-      {runtime.fallbacks.length > 0 && (
-        // Fix (Bug: L85): break-all to prevent long provider strings from overflowing
-        <p className="mt-1 line-clamp-2 text-[10px] text-amber-700 dark:text-amber-300 break-all">
-          Fallback: {runtime.fallbacks.join("; ")}
-        </p>
-      )}
-      {runtime.searchProviders.length > 0 && (
-        <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
-          Search: {runtime.searchProviders.join(", ")}
-        </p>
-      )}
-      {runtime.extractionProviders.length > 0 && (
-        <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
-          Extraction: {runtime.extractionProviders.join(", ")}
-          {runtime.fallbackExtractionCount > 0 ? ` (${runtime.fallbackExtractionCount} snippet fallback)` : ""}
-        </p>
-      )}
-      {warnings.length > 0 && (
-        <p className="mt-1 line-clamp-2 text-[10px] text-amber-700 dark:text-amber-300">
-          Warnings: {warnings.join("; ")}
-        </p>
-      )}
-      {runtime.errors.length > 0 && (
-        <p className="mt-1 line-clamp-2 text-[10px] text-red-700 dark:text-red-300">
-          Errors: {runtime.errors.join("; ")}
-        </p>
-      )}
-      {runtime.cooldowns.length > 0 && (
-        <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
-          Cooldown/rate limit: {runtime.cooldowns.join("; ")}
         </p>
       )}
     </div>

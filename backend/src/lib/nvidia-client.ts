@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { multiKeyFetch } from "./multi-key-fetch.js";
 
 /**
  * NVIDIA NIM (NVIDIA Inference Microservices) client.
@@ -27,6 +28,7 @@ export function getNvidiaClient(overrideKey?: string | null): OpenAI {
   return new OpenAI({
     baseURL: NVIDIA_BASE_URL,
     apiKey,
+    fetch: multiKeyFetch as any,
   });
 }
 

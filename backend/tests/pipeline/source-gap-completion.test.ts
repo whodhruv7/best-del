@@ -35,3 +35,26 @@ test("zero or near-zero strict evidence remains failed", () => {
 
   assert.equal(sourceContract.status, "failed");
 });
+
+test("deterministic source usage recovery completes with source gaps when citation contract passes", () => {
+  assert.equal(decideFinalResearchStatus({
+    mode: "fast_research",
+    coreGenerationUsed: true,
+    legacyFallbackUsed: false,
+    deterministicCitedFallbackUsed: true,
+    sourceContract: {
+      requiredSources: 20,
+      citationEligibleSources: 42,
+      finalUniqueCitedSources: 21,
+      passedStrict: true,
+      passedWithSourceGaps: false,
+      passed: true,
+      status: "passed",
+      reason: "Strict citation target met, but source usage validation needed a gap report.",
+    },
+    sourceGapReport: { explanation: "Validated SourceUsageMap covered 15/20 required sources." },
+    qualityGate: { passed: true, score: 98, repairRequired: false },
+    citationStatus: { finalUniqueCitedSources: 21 },
+    sourceUsageFailureReports: [{ reason: "deterministic extraction recovered using actual EvidenceCard text" }],
+  }), "completed_with_source_gaps");
+});

@@ -32,14 +32,7 @@ import {
   type ChatRunIdentity,
   type StreamTerminalEventState,
 } from "./stream-event-normalizer";
-import {
-  abortAllStreamControllers,
-  abortConversationControllers,
-  abortRunController,
-  addStreamController,
-  moveStreamController,
-  type StreamControllerRegistry,
-} from "./stream-controller-registry";
+import { globalStreamRegistry } from "@/lib/global-stream-registry";
 
 type ToastFn = (props: {
   title: string;
@@ -150,30 +143,28 @@ export function useChatRunController({
   getModelsForMode,
 }: UseChatRunControllerInput): UseChatRunControllerResult {
   const queryClient = useQueryClient();
-  const abortControllersByRunIdRef = useRef<StreamControllerRegistry>({});
-  const activeRunRef = useRef<ChatRunIdentity>({ runId: null, assistantMessageId: null, conversationId: null });
   const streamStartRef = useRef<number>(0);
   const streamCharsRef = useRef<number>(0);
   const silenceTimerResetRef = useRef<(() => void) | null>(null);
 
   const abortAllStreams = useCallback(() => {
-    abortAllStreamControllers(abortControllersByRunIdRef.current);
-    activeRunRef.current = { runId: null, assistantMessageId: null, conversationId: null };
+    globalStreamRegistry.abortAll();
+    globalStreamRegistry.clearActiveRun();
   }, []);
 
   const handleStop = useCallback(() => {
-    const activeRunId = activeRunRef.current.runId;
-    abortRunController(abortControllersByRunIdRef.current, activeRunId);
+    const activeRunId = globalStreamRegistry.getActiveRun().runId;
+    globalStreamRegistry.abortRun(activeRunId);
     if (activeRunId) {
       dispatchPipeline({ type: "RUN_STATUS", status: "cancelled" });
     }
-    activeRunRef.current = { runId: null, assistantMessageId: null, conversationId: null };
+    globalStreamRegistry.clearActiveRun();
   }, [dispatchPipeline]);
 
   const abortStreamsForConversation = useCallback((conversationId: number | null | undefined) => {
-    abortConversationControllers(abortControllersByRunIdRef.current, conversationId);
-    if (activeRunRef.current.conversationId === conversationId) {
-      activeRunRef.current = { runId: null, assistantMessageId: null, conversationId: null };
+    globalStreamRegistry.abortConversation(conversationId);
+    if (globalStreamRegistry.getActiveRun().conversationId === conversationId) {
+      globalStreamRegistry.clearActiveRun();
     }
   }, []);
 
@@ -198,18 +189,18 @@ export function useChatRunController({
     let streamedAssistantText = "";
     let streamSucceeded = false;
 
-    if (activeRunRef.current.runId && activeRunRef.current.conversationId === convId) {
-      abortRunController(abortControllersByRunIdRef.current, activeRunRef.current.runId);
+    if (globalStreamRegistry.getActiveRun().runId && globalStreamRegistry.getActiveRun().conversationId === convId) {
+      globalStreamRegistry.abortRun(globalStreamRegistry.getActiveRun().runId);
       dispatchPipeline({ type: "RUN_STATUS", status: "cancelled" });
     }
 
-    activeRunRef.current = {
+    globalStreamRegistry.setActiveRun({
       runId: clientRunId,
       assistantMessageId: null,
       conversationId: convId,
       researchMode: mode,
-    };
-    addStreamController(abortControllersByRunIdRef.current, clientRunId, controller, convId);
+    });
+    globalStreamRegistry.add(clientRunId, controller, convId);
     dispatchPipeline({ type: "SET_ACTIVE_RUN", runId: clientRunId, conversationId: convId });
 
     const onVisibilityChange = () => {
@@ -327,7 +318,7 @@ export function useChatRunController({
                 if (dataStr.trim()) {
                   try {
                     const flushedData = JSON.parse(dataStr) as Record<string, unknown>;
-                    const normalized = normalizeStreamEvent(flushedData, activeRunRef.current, convId);
+                    const normalized = normalizeStreamEvent(flushedData, globalStreamRegistry.getActiveRun(), convId);
                     if (normalized.kind === "terminal") {
                       terminalState = updateTerminalEventState(terminalState, normalized);
                     }
@@ -352,21 +343,20 @@ export function useChatRunController({
 
             try {
               const data = JSON.parse(dataStr) as Record<string, unknown>;
-              const normalized = normalizeStreamEvent(data, activeRunRef.current, convId);
+              const normalized = normalizeStreamEvent(data, globalStreamRegistry.getActiveRun(), convId);
 
               if (normalized.kind === "run_started") {
-                const previousRunId = activeRunRef.current.runId;
+                const previousRunId = globalStreamRegistry.getActiveRun().runId;
                 const nextRunId = normalized.nextIdentity.runId;
                 if (nextRunId) streamRunId = nextRunId;
                 if (
                   previousRunId &&
                   nextRunId &&
-                  previousRunId !== nextRunId &&
-                  abortControllersByRunIdRef.current[previousRunId]?.controller.signal.aborted === false
+                  previousRunId !== nextRunId
                 ) {
-                  moveStreamController(abortControllersByRunIdRef.current, previousRunId, nextRunId);
+                  globalStreamRegistry.move(previousRunId, nextRunId);
                 }
-                activeRunRef.current = normalized.nextIdentity;
+                globalStreamRegistry.setActiveRun(normalized.nextIdentity);
                 dispatchPipeline({
                   type: "SET_ACTIVE_RUN",
                   runId: String(normalized.nextIdentity.runId),
@@ -741,6 +731,14 @@ export function useChatRunController({
       }
 
       streamSucceeded = !terminalState.failureReceived && (gotContent || terminalState.successReceived || terminalState.receivedDone);
+      
+      // Fix: If the stream closed but we never received a terminal event from the backend,
+      // force transition the pipeline out of the "running" state so the UI doesn't lock up.
+      if (!terminalState.failureReceived && !terminalState.successReceived) {
+        dispatchPipeline({ type: "RUN_STATUS", status: streamSucceeded ? "completed" : "failed" });
+        dispatchPipeline({ type: "COMPLETE" });
+      }
+
       return streamSucceeded;
     } finally {
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -750,16 +748,16 @@ export function useChatRunController({
         URL.revokeObjectURL(keepaliveWorker.url);
         keepaliveWorker = null;
       }
-      const serverAssistantMessageId = activeRunRef.current.assistantMessageId;
+      const serverAssistantMessageId = globalStreamRegistry.getActiveRun().assistantMessageId;
       if (streamSucceeded && gotContent && streamedAssistantText.trim() && serverAssistantMessageId == null) {
         mergeStreamedAssistantMessage(queryClient, convId, streamedAssistantText);
       }
       if (streamSucceeded) {
         await hydrateConversationFromServer(queryClient, convId);
       }
-      if (streamRunId) delete abortControllersByRunIdRef.current[streamRunId];
-      if (activeRunRef.current.runId === streamRunId) {
-        activeRunRef.current = { runId: null, assistantMessageId: null, conversationId: null };
+      if (streamRunId) globalStreamRegistry.abortRun(streamRunId);
+      if (globalStreamRegistry.getActiveRun().runId === streamRunId) {
+        globalStreamRegistry.clearActiveRun();
       }
       dispatchPipeline({ type: "CLEAR_CURRENT_SEARCH" });
       await queryClient.invalidateQueries({ queryKey: getGetAnthropicConversationQueryKey(convId) });

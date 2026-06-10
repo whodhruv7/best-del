@@ -136,13 +136,23 @@ async function collectProviderDiagnostics(req?: { headers: Record<string, string
   });
 }
 
+// Cache health probe results for 30 seconds to avoid burning tokens on every /health hit
+let healthCache: { result: ReturnType<typeof buildProviderDiagnostics>; ts: number } | null = null;
+const HEALTH_CACHE_TTL_MS = 30_000;
+
 router.get("/healthz", (_req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
 
 router.get("/health", async (req, res, next) => {
   try {
+    const now = Date.now();
+    if (healthCache && now - healthCache.ts < HEALTH_CACHE_TTL_MS) {
+      res.status(healthCache.result.status === "ok" ? 200 : 503).json(healthCache.result);
+      return;
+    }
     const diagnostics = await collectProviderDiagnostics(req);
+    healthCache = { result: diagnostics, ts: now };
     res.status(diagnostics.status === "ok" ? 200 : 503).json(diagnostics);
   } catch (err) {
     next(err);

@@ -1,5 +1,14 @@
 type Mode = "deep_research" | "web_search" | "normal";
 
+export class QueueFullError extends Error {
+  readonly statusCode = 429;
+  readonly code = "queue_full";
+  constructor(mode: string, size: number) {
+    super(`${mode} queue is full (${size} pending). Try again in a moment.`);
+    this.name = "QueueFullError";
+  }
+}
+
 class SimpleQueue {
   private active = 0;
   private readonly pending: Array<() => void> = [];
@@ -11,7 +20,7 @@ class SimpleQueue {
 
   async add<T>(fn: () => Promise<T>): Promise<T> {
     if (this.pending.length > this.maxPending) {
-      throw new Error(`Queue is full (${this.pending.length} pending). Try again in a moment.`);
+      throw new QueueFullError("default", this.pending.length);
     }
     if (this.active >= this.concurrency) {
       await new Promise<void>((resolve) => this.pending.push(resolve));
@@ -35,7 +44,7 @@ const queues: Record<Mode, SimpleQueue> = {
 export async function enqueueRequest<T>(mode: Mode, fn: () => Promise<T>): Promise<T> {
   const queue = queues[mode] ?? queues.normal;
   if (queue.size > 10) {
-    throw new Error(`${mode} queue is full (${queue.size} pending). Try again in a moment.`);
+    throw new QueueFullError(mode, queue.size);
   }
   return queue.add(fn);
 }

@@ -36,14 +36,14 @@ export function TopHeader({
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/95 shadow-[0_1px_8px_rgba(59,111,212,0.06)] backdrop-blur-xl dark:bg-[#0d0e12]/95">
-      <div className="top-header grid min-h-[52px] grid-cols-[1fr_auto] items-center gap-3 px-3 py-1.5 sm:px-4">
+      <div className="top-header grid min-h-[54px] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2.5 py-1.5 sm:min-h-[56px] sm:gap-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="desk-topbar-button h-9 w-9 rounded-lg text-muted-foreground hover:border-[#3b6fd450] hover:bg-muted hover:text-foreground md:hidden"
+                className="desk-topbar-button h-10 w-10 rounded-xl text-muted-foreground hover:border-[#3b6fd450] hover:bg-muted hover:text-foreground md:hidden"
                 onClick={onOpenMobileSidebar}
                 aria-label="Open navigation"
               >
@@ -53,19 +53,20 @@ export function TopHeader({
             <TooltipContent>Open navigation</TooltipContent>
           </Tooltip>
 
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#3b6fd450] bg-[#3b6fd4] shadow-[0_0_24px_rgba(59,111,212,0.24)]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#3b6fd450] bg-[#3b6fd4] shadow-[0_0_24px_rgba(59,111,212,0.18)] sm:h-10 sm:w-10"
               aria-hidden
             >
               <Bot className="h-4.5 w-4.5 text-white" />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold tracking-[-0.02em] text-foreground">
+              <div className="truncate text-[13px] font-semibold tracking-[-0.02em] text-foreground sm:text-sm">
                 BestDel Intelligence Desk
               </div>
-              <div className="hidden text-[11px] font-medium text-muted-foreground sm:block">
-                Calm command workspace
+              <div className="truncate text-[11px] font-medium text-muted-foreground">
+                <span className="sm:hidden">{activeArchiveName || "Workspace"}</span>
+                <span className="hidden sm:inline">Calm command workspace</span>
               </div>
             </div>
           </div>
@@ -104,14 +105,14 @@ export function TopHeader({
         </div>
 
         {onCreateArchive && (
-          <div className="ml-auto flex items-center gap-2 justify-self-end">
+          <div className="ml-auto flex min-w-0 items-center gap-1.5 justify-self-end sm:gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="hidden max-w-[230px] items-center gap-2 rounded-full border border-[#2a2d38] bg-[#111215] px-3 py-1 text-[11px] font-medium text-[#9a9ab0] lg:inline-flex">
+                <div className="hidden max-w-[230px] items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1 text-[11px] font-medium text-muted-foreground lg:inline-flex dark:border-[#2a2d38] dark:bg-[#111215] dark:text-[#9a9ab0]">
                   <Server className="h-3.5 w-3.5 text-[#d4a03b]" />
                   <span className="truncate">{providerLabel}</span>
                   {healthyProviderCount > 0 && (
-                    <span className="truncate text-[#6b6b82]">/ {selectedModelLabel}</span>
+                    <span className="truncate text-muted-foreground/70 dark:text-[#6b6b82]">/ {selectedModelLabel}</span>
                   )}
                 </div>
               </TooltipTrigger>
@@ -119,18 +120,19 @@ export function TopHeader({
                 {healthyProviderCount > 0 ? `Active model: ${selectedModelLabel}` : "Configure provider keys in Settings"}
               </TooltipContent>
             </Tooltip>
-            <div className={degraded ? "status-pill-degraded" : "status-pill-ready"}>
+            <div className={degraded ? "status-pill-degraded topbar-status-pill" : "status-pill-ready topbar-status-pill"}>
               <motion.span
                 className="status-dot"
                 animate={{ scale: [1, 1.25, 1] }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               />
-              {degraded ? "AI degraded" : "AI ready"}
+              <span className="hidden min-[390px]:inline">{degraded ? "AI degraded" : "AI ready"}</span>
+              <span className="min-[390px]:hidden">{degraded ? "AI" : "Ready"}</span>
             </div>
             <Button
               size="sm"
               onClick={onCreateArchive}
-              className="desk-topbar-button desk-topbar-primary h-9 shrink-0 gap-2 rounded-lg border border-[#d4a03b70] bg-[var(--accent-secondary)] px-3 text-[#111215] shadow-[0_12px_28px_rgba(212,160,59,0.22)] hover:bg-[#f3c76f] hover:text-[#08090b]"
+              className="desk-topbar-button desk-topbar-primary h-10 shrink-0 gap-2 rounded-xl border border-[#d4a03b70] bg-[var(--accent-secondary)] px-2.5 text-[#111215] shadow-[0_12px_28px_rgba(212,160,59,0.18)] hover:bg-[#f3c76f] hover:text-[#08090b] sm:h-9 sm:px-3"
               data-testid="button-top-new-archive"
               aria-label="Create new archive"
             >

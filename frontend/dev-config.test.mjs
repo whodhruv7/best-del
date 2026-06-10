@@ -28,8 +28,9 @@ test("provider key save refreshes every model route with the current form keys",
   assert.match(settingsDialog, /currentConfigured/);
   assert.match(settingsDialog, /effectiveConfigured/);
   assert.match(chatArea, /useProviderModels/);
-  assert.match(chatArea, /DropdownMenuContent[\s\S]*side="top"/);
-  assert.match(chatArea, /avoidCollisions=\{false\}/);
+  assert.match(chatArea, /bottom-\[calc\(100%\+0\.5rem\)\]/);
+  assert.match(chatArea, /data-testid="input-model-search"/);
+  assert.match(chatArea, /data-testid="button-save-models"/);
   assert.doesNotMatch(chatArea, /const\s+refreshProviderModels\s*=\s*useCallback/);
   assert.match(providerHook, /export function useProviderModels/);
   assert.match(providerHook, /window\.addEventListener\("bestdel:provider-keys-updated"/);
@@ -71,14 +72,14 @@ test("provider model refresh accepts 200 payloads that return model ids as strin
   assert.match(statusNormalizer, /availableForDisplay: isProviderDisplayable\(next,\s*models\)/);
 });
 
-test("dark-only chat shell keeps assistant text visible and welcome glint scoped", async () => {
+test("light chat shell keeps assistant text visible and welcome glint scoped", async () => {
   const indexHtml = await readFile(new URL("./index.html", import.meta.url), "utf8");
   const chatArea = await readFile(new URL("./src/components/chat/chat-area.tsx", import.meta.url), "utf8");
   const indexCss = await readFile(new URL("./src/index.css", import.meta.url), "utf8");
 
-  assert.match(indexHtml, /<html[^>]*class=["'][^"']*\bdark\b/);
+  assert.doesNotMatch(indexHtml, /<html[^>]*class=["'][^"']*\bdark\b/);
   assert.doesNotMatch(chatArea, /text-neutral-900\s+dark:prose-invert\s+dark:text-neutral-100/);
-  assert.match(chatArea, /className=["'][^"']*\btext-\[#eeeef5\]/);
+  assert.match(chatArea, /assistant-bubble rounded-2xl rounded-tl-sm text-foreground/);
   assert.match(chatArea, /from\s+["']\.\/cursor-glint["']/);
   assert.match(chatArea, /<CursorGlint\s*\/>/);
   assert.doesNotMatch(chatArea, /<div className=["']hidden["']>\s*[\s\S]*data-testid=["']char-counter["']/);
@@ -101,6 +102,8 @@ test("chat composer hierarchy stays compact and message bubbles keep readable me
   assert.match(chatArea, /<ChatComposer\b/);
   assert.match(chatArea, /focusRef=\{composerFocusRef\}/);
   assert.match(chatArea, /composerFocusRef\.current\?\.\(\)/);
+  assert.match(chatArea, /showLiveResearchRun/);
+  assert.match(chatArea, /data-testid="button-toggle-live-research"/);
   assert.match(chatArea, /activeChip=/);
   assert.match(chatArea, /onSelectChip=/);
   assert.match(chatComposer, /rounded-\[24px\]/);

@@ -1,4 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
 // Supabase table types
@@ -90,18 +93,137 @@ export interface ArchiveIntelligenceProfileRecord {
 
 let _supabase: SupabaseClient | null = null;
 
+interface LocalDbState {
+  nextIds: {
+    archive: number;
+    conversation: number;
+    message: number;
+    archiveIntelligenceProfile: number;
+  };
+  archives: ArchiveRecord[];
+  conversations: ConversationRecord[];
+  messages: MessageRecord[];
+  archiveContexts: ArchiveContextRecord[];
+  archiveResearchAngles: ArchiveResearchAnglesRecord[];
+  archiveIntelligenceProfiles: ArchiveIntelligenceProfileRecord[];
+}
+
+const localDbFile = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'data',
+  'bestdel.local-db.json',
+);
+
+let localDbState: LocalDbState | null = null;
+let localDbWriteQueue: Promise<void> = Promise.resolve();
+
+function createEmptyLocalDb(): LocalDbState {
+  return {
+    nextIds: {
+      archive: 1,
+      conversation: 1,
+      message: 1,
+      archiveIntelligenceProfile: 1,
+    },
+    archives: [],
+    conversations: [],
+    messages: [],
+    archiveContexts: [],
+    archiveResearchAngles: [],
+    archiveIntelligenceProfiles: [],
+  };
+}
+
+function normalizeLocalDb(parsed: Partial<LocalDbState> | null | undefined): LocalDbState {
+  const empty = createEmptyLocalDb();
+  const state = {
+    ...empty,
+    ...(parsed ?? {}),
+    nextIds: { ...empty.nextIds, ...(parsed?.nextIds ?? {}) },
+    archives: Array.isArray(parsed?.archives) ? parsed.archives : [],
+    conversations: Array.isArray(parsed?.conversations) ? parsed.conversations : [],
+    messages: Array.isArray(parsed?.messages) ? parsed.messages : [],
+    archiveContexts: Array.isArray(parsed?.archiveContexts) ? parsed.archiveContexts : [],
+    archiveResearchAngles: Array.isArray(parsed?.archiveResearchAngles) ? parsed.archiveResearchAngles : [],
+    archiveIntelligenceProfiles: Array.isArray(parsed?.archiveIntelligenceProfiles) ? parsed.archiveIntelligenceProfiles : [],
+  };
+
+  state.nextIds.archive = Math.max(state.nextIds.archive, ...state.archives.map((r) => r.id + 1), 1);
+  state.nextIds.conversation = Math.max(state.nextIds.conversation, ...state.conversations.map((r) => r.id + 1), 1);
+  state.nextIds.message = Math.max(state.nextIds.message, ...state.messages.map((r) => r.id + 1), 1);
+  state.nextIds.archiveIntelligenceProfile = Math.max(
+    state.nextIds.archiveIntelligenceProfile,
+    ...state.archiveIntelligenceProfiles.map((r) => r.id + 1),
+    1,
+  );
+
+  return state;
+}
+
+async function loadLocalDb(): Promise<LocalDbState> {
+  if (localDbState) return localDbState;
+
+  try {
+    const raw = await readFile(localDbFile, 'utf8');
+    localDbState = normalizeLocalDb(JSON.parse(raw) as Partial<LocalDbState>);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code !== 'ENOENT') {
+      console.warn('[db] Local development DB could not be read; starting fresh:', err);
+    }
+    localDbState = createEmptyLocalDb();
+  }
+
+  return localDbState;
+}
+
+async function persistLocalDb(state: LocalDbState): Promise<void> {
+  await mkdir(path.dirname(localDbFile), { recursive: true });
+  await writeFile(localDbFile, JSON.stringify(state, null, 2), 'utf8');
+}
+
+async function mutateLocalDb<T>(mutator: (state: LocalDbState) => T | Promise<T>): Promise<T> {
+  const operation = localDbWriteQueue.then(async () => {
+    const state = await loadLocalDb();
+    const result = await mutator(state);
+    await persistLocalDb(state);
+    return result;
+  });
+  localDbWriteQueue = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
+export function hasSupabaseConfig(): boolean {
+  return Boolean(
+    process.env.SUPABASE_URL?.trim() &&
+    (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim()),
+  );
+}
+
+export function isUsingLocalDb(): boolean {
+  return process.env.NODE_ENV !== 'production' && !hasSupabaseConfig();
+}
+
 export function getSupabaseClient(): SupabaseClient {
   if (!_supabase) {
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    // Prefer service role key for server-side; fall back to anon only if not set
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+      process.env.SUPABASE_ANON_KEY?.trim();
 
     if (!supabaseUrl || !supabaseKey) {
       throw new Error(
-        'Missing Supabase credentials. Set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.'
+        'Missing Supabase credentials. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env'
       );
     }
 
     _supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
       realtime: {
         transport: WebSocket as unknown as typeof globalThis.WebSocket,
       },
@@ -146,6 +268,11 @@ export function toApiMessage(record: MessageRecord): ApiMessageRecord {
 }
 
 export async function listArchives(): Promise<ArchiveRecord[]> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return [...state.archives].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('archives')
@@ -157,6 +284,21 @@ export async function listArchives(): Promise<ArchiveRecord[]> {
 }
 
 export async function createArchive(name: string, topic: string): Promise<ArchiveRecord> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const now = new Date().toISOString();
+      const archive: ArchiveRecord = {
+        id: state.nextIds.archive++,
+        name,
+        topic,
+        created_at: now,
+        updated_at: now,
+      };
+      state.archives.push(archive);
+      return archive;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
   
@@ -174,6 +316,17 @@ export async function updateArchive(
   id: number,
   updates: { name?: string; topic?: string }
 ): Promise<ArchiveRecord | null> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const found = state.archives.find((archive) => archive.id === id);
+      if (!found) return null;
+      if (updates.name !== undefined) found.name = updates.name;
+      if (updates.topic !== undefined) found.topic = updates.topic;
+      found.updated_at = new Date().toISOString();
+      return found;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const updateData: Partial<ArchiveRecord> = { ...updates, updated_at: new Date().toISOString() };
   
@@ -189,6 +342,11 @@ export async function updateArchive(
 }
 
 export async function getArchiveById(id: number): Promise<ArchiveRecord | null> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.archives.find((archive) => archive.id === id) ?? null;
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('archives')
@@ -201,6 +359,16 @@ export async function getArchiveById(id: number): Promise<ArchiveRecord | null> 
 }
 
 export async function deleteArchive(id: number): Promise<boolean> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      state.archives = state.archives.filter((archive) => archive.id !== id);
+      state.archiveContexts = state.archiveContexts.filter((context) => context.archive_id !== id);
+      state.archiveResearchAngles = state.archiveResearchAngles.filter((angles) => angles.archive_id !== id);
+      state.archiveIntelligenceProfiles = state.archiveIntelligenceProfiles.filter((profile) => profile.archive_id !== id);
+      return true;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const { error } = await supabase.from('archives').delete().eq('id', id);
   if (error) throw error;
@@ -208,6 +376,13 @@ export async function deleteArchive(id: number): Promise<boolean> {
 }
 
 export async function getConversationsByArchiveId(archiveId: number): Promise<ConversationRecord[]> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.conversations
+      .filter((conversation) => conversation.archive_id === archiveId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('conversations')
@@ -220,6 +395,11 @@ export async function getConversationsByArchiveId(archiveId: number): Promise<Co
 }
 
 export async function listConversations(): Promise<ConversationRecord[]> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return [...state.conversations].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('conversations')
@@ -234,6 +414,19 @@ export async function createConversation(
   archiveId: number,
   title: string
 ): Promise<ConversationRecord> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const conversation: ConversationRecord = {
+        id: state.nextIds.conversation++,
+        archive_id: archiveId,
+        title,
+        created_at: new Date().toISOString(),
+      };
+      state.conversations.push(conversation);
+      return conversation;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
   
@@ -248,6 +441,11 @@ export async function createConversation(
 }
 
 export async function getConversationById(id: number): Promise<ConversationRecord | null> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.conversations.find((conversation) => conversation.id === id) ?? null;
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('conversations')
@@ -260,6 +458,15 @@ export async function getConversationById(id: number): Promise<ConversationRecor
 }
 
 export async function updateConversationTitle(id: number, title: string): Promise<ConversationRecord | null> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const found = state.conversations.find((conversation) => conversation.id === id);
+      if (!found) return null;
+      found.title = title;
+      return found;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('conversations')
@@ -276,6 +483,14 @@ export async function deleteConversation(id: number): Promise<ConversationRecord
   const conversation = await getConversationById(id);
   if (!conversation) return null;
 
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      state.conversations = state.conversations.filter((item) => item.id !== id);
+      state.messages = state.messages.filter((message) => message.conversation_id !== id);
+      return conversation;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const { error } = await supabase.from('conversations').delete().eq('id', id);
   if (error) throw error;
@@ -285,6 +500,13 @@ export async function deleteConversation(id: number): Promise<ConversationRecord
 export async function getMessagesByConversationId(
   conversationId: number
 ): Promise<MessageRecord[]> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.messages
+      .filter((message) => message.conversation_id === conversationId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('messages')
@@ -304,6 +526,26 @@ export async function createMessage(
   runId?: string | null,
   runStatus?: string | null
 ): Promise<MessageRecord> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const now = new Date().toISOString();
+      const message: MessageRecord = {
+        id: state.nextIds.message++,
+        conversation_id: conversationId,
+        role,
+        content,
+        metadata_json: metadata ? JSON.stringify(metadata) : null,
+        run_id: runId ?? null,
+        run_status: runStatus ?? null,
+        run_phase: runStatus ? 'terminal' : null,
+        run_last_heartbeat_at: runStatus ? now : null,
+        created_at: now,
+      };
+      state.messages.push(message);
+      return message;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
   
@@ -335,8 +577,18 @@ export async function createMessageFromJson(
   runId?: string | null,
   runStatus?: string | null
 ): Promise<MessageRecord> {
-  const parsedMetadata = metadataJson ? JSON.parse(metadataJson) as Record<string, unknown> : null;
+  const parsedMetadata = safeParseJson(metadataJson);
   return createMessage(conversationId, role, content, parsedMetadata, runId, runStatus);
+}
+
+function safeParseJson(json: string | null | undefined): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function updateMessage(
@@ -348,6 +600,23 @@ export async function updateMessage(
     runStatus?: string | null;
   }
 ): Promise<MessageRecord | null> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const found = state.messages.find((message) => message.id === id);
+      if (!found) return null;
+      const now = new Date().toISOString();
+      if (updates.content !== undefined) found.content = updates.content;
+      if (updates.metadataJson !== undefined) found.metadata_json = updates.metadataJson;
+      if (updates.runId !== undefined) found.run_id = updates.runId;
+      if (updates.runStatus !== undefined) {
+        found.run_status = updates.runStatus;
+        found.run_phase = 'terminal';
+        found.run_last_heartbeat_at = now;
+      }
+      return found;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
   const updateData: Record<string, unknown> = {};
@@ -373,6 +642,11 @@ export async function updateMessage(
 }
 
 export async function getArchiveContext(archiveId: number): Promise<ArchiveContextRecord | null> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.archiveContexts.find((context) => context.archive_id === archiveId) ?? null;
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('archive_contexts')
@@ -388,6 +662,21 @@ export async function upsertArchiveContext(
   archiveId: number,
   summary: string
 ): Promise<ArchiveContextRecord> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const now = new Date().toISOString();
+      const found = state.archiveContexts.find((context) => context.archive_id === archiveId);
+      if (found) {
+        found.summary = summary;
+        found.updated_at = now;
+        return found;
+      }
+      const context = { archive_id: archiveId, summary, updated_at: now };
+      state.archiveContexts.push(context);
+      return context;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
   
@@ -404,6 +693,11 @@ export async function upsertArchiveContext(
 export async function getArchiveResearchAngles(
   archiveId: number
 ): Promise<ArchiveResearchAnglesRecord | null> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.archiveResearchAngles.find((angles) => angles.archive_id === archiveId) ?? null;
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('archive_research_angles')
@@ -415,11 +709,54 @@ export async function getArchiveResearchAngles(
   return data || null;
 }
 
+export async function listArchiveResearchAngles(
+  archiveIds: number[]
+): Promise<ArchiveResearchAnglesRecord[]> {
+  const ids = [...new Set(archiveIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return [];
+
+  if (isUsingLocalDb()) {
+    const idSet = new Set(ids);
+    const state = await loadLocalDb();
+    return state.archiveResearchAngles.filter((angles) => idSet.has(angles.archive_id));
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('archive_research_angles')
+    .select('*')
+    .in('archive_id', ids);
+
+  if (error) throw error;
+  return data || [];
+}
+
 export async function upsertArchiveResearchAngles(
   archiveId: number,
   angles: string[],
   meta: Record<string, unknown> = {}
 ): Promise<ArchiveResearchAnglesRecord> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const now = new Date().toISOString();
+      const found = state.archiveResearchAngles.find((entry) => entry.archive_id === archiveId);
+      if (found) {
+        found.angles_json = JSON.stringify(angles);
+        found.meta_json = JSON.stringify(meta);
+        found.updated_at = now;
+        return found;
+      }
+      const entry = {
+        archive_id: archiveId,
+        angles_json: JSON.stringify(angles),
+        meta_json: JSON.stringify(meta),
+        updated_at: now,
+      };
+      state.archiveResearchAngles.push(entry);
+      return entry;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
   
@@ -441,6 +778,11 @@ export async function upsertArchiveResearchAngles(
 export async function getArchiveIntelligenceProfile(
   archiveId: number
 ): Promise<ArchiveIntelligenceProfileRecord | null> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.archiveIntelligenceProfiles.find((profile) => profile.archive_id === archiveId) ?? null;
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('archive_intelligence_profiles')
@@ -456,6 +798,25 @@ export async function upsertArchiveIntelligenceProfile(
   archiveId: number,
   profile: Partial<Omit<ArchiveIntelligenceProfileRecord, 'id' | 'archive_id' | 'updated_at'>>
 ): Promise<ArchiveIntelligenceProfileRecord> {
+  if (isUsingLocalDb()) {
+    return mutateLocalDb((state) => {
+      const now = new Date().toISOString();
+      const found = state.archiveIntelligenceProfiles.find((entry) => entry.archive_id === archiveId);
+      if (found) {
+        Object.assign(found, profile, { updated_at: now });
+        return found;
+      }
+      const entry: ArchiveIntelligenceProfileRecord = {
+        id: state.nextIds.archiveIntelligenceProfile++,
+        archive_id: archiveId,
+        ...profile,
+        updated_at: now,
+      };
+      state.archiveIntelligenceProfiles.push(entry);
+      return entry;
+    });
+  }
+
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
   
@@ -474,6 +835,11 @@ export async function upsertArchiveIntelligenceProfile(
 }
 
 export async function countArchives(): Promise<number> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.archives.length;
+  }
+
   const supabase = getSupabaseClient();
   const { count, error } = await supabase
     .from('archives')
@@ -484,6 +850,11 @@ export async function countArchives(): Promise<number> {
 }
 
 export async function countConversationsByArchiveId(archiveId: number): Promise<number> {
+  if (isUsingLocalDb()) {
+    const state = await loadLocalDb();
+    return state.conversations.filter((conversation) => conversation.archive_id === archiveId).length;
+  }
+
   const supabase = getSupabaseClient();
   const { count, error } = await supabase
     .from('conversations')

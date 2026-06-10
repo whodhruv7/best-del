@@ -14,5 +14,6 @@ test("CouncilChamberPanel renders six councillor cards and the Council response 
   assert.match(html, /Deliberation Layer/);
   assert.match(html, /Floor Strategy Layer/);
   assert.match(html, /Chief Councillor Verdict/);
-  assert.match(html, /Strategy Brief/);
+  assert.match(html, /Final strategy verdict/);
+  assert.match(html, /Download Dossier/);
 });

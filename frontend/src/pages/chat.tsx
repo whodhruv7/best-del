@@ -19,6 +19,7 @@ import {
   useCreateArchive,
   useUpdateResearchAngles,
   useListArchives,
+  type Archive,
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -121,21 +122,28 @@ export default function Chat() {
 
     try {
       const created = await createArchiveMutation.mutateAsync({ data: { name, topic } });
+      let createdArchive: Archive = created;
       if (angleDrafts.length > 0) {
+        const angles = angleDrafts.slice(0, 20).map((a) => a.trim()).filter(Boolean);
         await updateResearchAnglesMutation.mutateAsync({
           archiveId: created.id,
-          data: { angles: angleDrafts.slice(0, 20).map((a) => a.trim()).filter(Boolean) },
+          data: { angles },
         });
+        createdArchive = { ...created, researchAngles: angles };
       }
 
+      queryClient.setQueryData<Archive[]>(getListArchivesQueryKey(), (old = []) => [
+        ...old.filter((archive) => archive.id !== createdArchive.id),
+        createdArchive,
+      ]);
+      handleArchiveChange(created.id);
       setCreateArchiveOpen(false);
       setArchiveName("");
       setArchiveTopic("");
       setAngleDrafts([]);
       setCreateTab("topic");
 
-      await queryClient.invalidateQueries({ queryKey: getListArchivesQueryKey() });
-      handleArchiveChange(created.id);
+      void queryClient.invalidateQueries({ queryKey: getListArchivesQueryKey() });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to create archive. Please try again.";
@@ -145,7 +153,7 @@ export default function Chat() {
 
   return (
     <div
-      className="flex h-dvh w-screen overflow-hidden text-foreground font-sans"
+      className="bestdel-app-shell flex h-dvh w-screen max-w-full overflow-hidden text-foreground font-sans"
       style={{ backgroundColor: "var(--bg-shell)" }}
     >
       <div className="flex min-h-0 flex-1 overflow-hidden" style={{ backgroundColor: "var(--bg-shell)" }}>
@@ -168,15 +176,15 @@ export default function Chat() {
               />
               <main className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
                 {!archivesLoading && archives.length === 0 && !createArchiveOpen && (
-                  <div className="border-b px-4 py-3 sm:px-5" style={{ borderBottomColor: "var(--border-hex)" }}>
-                    <div className="flex max-w-3xl items-center justify-between gap-3">
+                  <div className="border-b px-3 py-3 sm:px-5" style={{ borderBottomColor: "var(--border-hex)" }}>
+                    <div className="flex max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold">No archives yet</div>
                         <div className="text-sm text-muted-foreground">
                           Begin with an Archive, a dedicated workspace that retains context, sources, and strategy for your committee agenda.
                         </div>
                       </div>
-                      <Button onClick={openCreateArchiveDialog}>Create archive</Button>
+                      <Button className="w-full sm:w-auto" onClick={openCreateArchiveDialog}>Create archive</Button>
                     </div>
                   </div>
                 )}

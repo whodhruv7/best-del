@@ -1,21 +1,34 @@
 import React from "react";
-import { Download, FileText, GitBranch, Scale, ShieldCheck, Users } from "lucide-react";
+import { Download, FileText, GitBranch, Scale, ShieldCheck, Users, Orbit, Sparkles, BrainCircuit, CheckCircle2, ChevronRight, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CouncillorCard } from "./councillor-card";
 import { ChiefVerdictPanel } from "./chief-verdict-panel";
 import { DeliberationBoard } from "./deliberation-board";
 import { FloorStrategyPanel } from "./floor-strategy-panel";
 import { downloadCouncilDossier } from "./council-dossier-export";
-import { RETRIEVING_COUNCILLOR_IDS, type CouncilSession } from "./council-types";
+import { RETRIEVING_COUNCILLOR_IDS, type CouncilSession, type RetrievingCouncillorId } from "./council-types";
+import { motion } from "framer-motion";
 
 export function CouncilChamberPanel({ session }: { session: CouncilSession | null }) {
   if (!session) {
     return (
-      <section className="rounded-2xl border border-border/70 bg-background/95 p-5 text-foreground shadow-sm dark:border-[#27324a] dark:bg-[linear-gradient(145deg,rgba(13,18,30,0.94),rgba(7,9,14,0.96))]">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600 dark:text-amber-200">Council Mode</p>
-        <h2 className="mt-1 text-lg font-semibold">Council chamber initializing</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Six specialist councillors are preparing the parliamentary advisory session.</p>
-      </section>
+      <motion.section 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl border border-[#27324a] bg-[linear-gradient(145deg,rgba(13,18,30,0.94),rgba(7,9,14,0.96))] p-8 text-foreground shadow-2xl backdrop-blur-xl dark:border-[#27324a]"
+      >
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400">
+            <Orbit className="h-6 w-6 animate-[spin_10s_linear_infinite]" />
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-500/80">System Boot</p>
+            <h2 className="mt-1 text-xl font-semibold text-slate-100">Initializing Council Chamber</h2>
+          </div>
+        </div>
+        <p className="mt-4 text-sm text-[#7f8aa3]">Deploying 6 specialized agents for multi-domain parliamentary analysis...</p>
+      </motion.section>
     );
   }
 
@@ -23,188 +36,221 @@ export function CouncilChamberPanel({ session }: { session: CouncilSession | nul
   const status = statusCopy(session.status);
   const side = session.stance === "government" ? "Treasury Bench" : session.stance === "opposition" ? "Opposition" : "Independent brief";
   const phaseSteps = buildCouncilPhases(session.status, completedCount);
+  const agreement = Math.max(0, Math.min(100, Math.round(session.agreement_score || 0)));
 
   return (
-    <section className="space-y-5" data-council-chamber>
-      <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-background/95 p-5 shadow-sm dark:border-[#27324a] dark:bg-[radial-gradient(circle_at_top,rgba(59,111,212,0.16),transparent_36%),linear-gradient(145deg,rgba(12,17,29,0.96),rgba(7,9,14,0.98))] dark:shadow-[0_24px_90px_-52px_rgba(59,111,212,0.7)]">
-        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/55 to-transparent" />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/30 dark:text-amber-100">
-                Council Mode
-              </span>
-              <span className="rounded-full border border-[#10182814] bg-white/70 px-2.5 py-1 text-[11px] text-[#667085] dark:border-[#3b6fd4]/35 dark:bg-[#3b6fd4]/10 dark:text-[#b9caff]">
-                Multi-agent MUN cabinet
-              </span>
-            </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-normal text-foreground sm:text-3xl dark:text-slate-50">Council Chamber</h2>
-            <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-muted-foreground dark:text-[#a7b1c5]">
-              Legal, economic, strategic, social, historical, and opposition agents inspect the evidence before a Chief verdict turns it into usable floor strategy.
-            </p>
+    <motion.section 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="space-y-6" 
+      data-council-chamber
+    >
+      {/* Premium Hero Header */}
+      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0c0e14] p-6 shadow-2xl md:p-8">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#3b6fd4]/10 via-transparent to-amber-500/5 mix-blend-screen" />
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#3b6fd4]/20 blur-[80px]" />
+        
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1">
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
+              className="flex flex-wrap items-center gap-3"
+            >
+              <div className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.15em] text-amber-400">
+                <Sparkles className="h-3 w-3" /> Council Mode
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full border border-[#3b6fd4]/40 bg-[#3b6fd4]/10 px-3 py-1 text-xs text-[#a9c1ff]">
+                <BrainCircuit className="h-3 w-3" /> Multi-Agent Cabinet
+              </div>
+            </motion.div>
+            
+            <motion.h2 
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+              className="mt-5 text-3xl font-bold tracking-tight text-white md:text-4xl"
+            >
+              Council Chamber Active
+            </motion.h2>
+            <motion.p 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+              className="mt-3 max-w-2xl text-sm leading-relaxed text-[#9ba8c2] md:text-base"
+            >
+              Six highly specialized AI councillors are concurrently analyzing the agenda from legal, economic, strategic, social, historical, and adversarial perspectives to forge an unbreakable floor strategy.
+            </motion.p>
           </div>
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-300/20 dark:text-emerald-100">
-              {status}
-            </span>
+
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
+            className="flex flex-col items-start gap-3 sm:items-end"
+          >
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
+              <Activity className="h-4 w-4 animate-pulse text-emerald-400" />
+              <span className="text-sm font-semibold text-emerald-300">{status}</span>
+            </div>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
               onClick={() => downloadCouncilDossier(session)}
               disabled={session.status !== "complete"}
-              className="border-amber-500/35 bg-background/70 text-amber-700 hover:bg-amber-500/10 dark:border-amber-300/30 dark:bg-black/20 dark:text-amber-100 dark:hover:bg-amber-300/10 dark:hover:text-amber-50"
+              className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-amber-500/25 disabled:opacity-50 disabled:hover:scale-100"
             >
+              <div className="absolute inset-0 bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
               <Download className="mr-2 h-4 w-4" />
-              Download Chamber Brief
+              Download Dossier
             </Button>
+          </motion.div>
+        </div>
+
+        {/* Info Strip */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+          className="relative z-10 mt-8 grid gap-4 divide-y divide-white/[0.06] rounded-2xl border border-white/[0.08] bg-black/40 p-1 backdrop-blur-md sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+        >
+          <div className="p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#7f8aa3]">Agenda</p>
+            <p className="mt-1.5 line-clamp-2 text-sm font-medium text-[#e5ebfb]">{session.topic || "Pending"}</p>
           </div>
-        </div>
-
-        <div className="relative mt-5 grid gap-3 lg:grid-cols-[1.3fr_0.7fr_0.7fr_0.7fr]">
-          <HeaderStat label="Agenda" value={session.topic || "Committee agenda pending"} />
-          <HeaderStat label="House / committee" value="Indian parliamentary committee" />
-          <HeaderStat label="Role / side" value={side} />
-          <HeaderStat label="Councillors" value={`${completedCount}/6 briefs sealed`} />
-        </div>
-
-        <CouncilPhaseRail steps={phaseSteps} />
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
-        <CouncilPurposePanel completedCount={completedCount} agreementScore={session.agreement_score} />
-        <div className="rounded-2xl border border-border/70 bg-background/90 p-4 shadow-sm dark:border-[#27324a] dark:bg-black/20">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-semibold text-foreground dark:text-slate-50">Cabinet Map</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">Each councillor contributes evidence, vulnerabilities, and usable floor lines.</p>
+          <div className="p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#7f8aa3]">Role / Stance</p>
+            <p className="mt-1.5 text-sm font-medium text-[#e5ebfb]">{side}</p>
+          </div>
+          <div className="p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#7f8aa3]">Live Status</p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-[#3b6fd4] shadow-[0_0_8px_rgba(59,111,212,0.8)]" />
+              <p className="text-sm font-medium text-[#e5ebfb]">{completedCount}/6 Briefs Sealed</p>
             </div>
-            <Users className="h-4 w-4 text-[#3b6fd4]" />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {[
-              ["Legal", "Treaties, doctrine, rights exposure"],
-              ["Economic", "Budgets, capacity, tradeoffs"],
-              ["Strategic", "POIs, blocs, timing"],
-              ["Social", "Affected groups and legitimacy"],
-              ["Historical", "Precedent and institutional memory"],
-              ["Opposition", "Adversarial stress test"],
-            ].map(([label, desc]) => (
-              <div key={label} className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-                <p className="text-[11px] font-semibold text-foreground">{label}</p>
-                <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        </motion.div>
+
+        {/* Phase Rail */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
+          <CouncilPhaseRail steps={phaseSteps} />
+        </motion.div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {RETRIEVING_COUNCILLOR_IDS.map((id) => (
-          <CouncillorCard key={id} councillorId={id} output={session.councillors[id]} />
+      {/* Deliberation Overview */}
+      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <motion.div 
+          initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }}
+          className="relative overflow-hidden rounded-3xl border border-[#27324a] bg-gradient-to-b from-[#141a29] to-[#0c0e14] p-6 shadow-xl"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#3b6fd4]/10">
+              <Scale className="h-5 w-5 text-[#3b6fd4]" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-100">Deliberation Engine</h3>
+              <p className="text-xs text-[#7f8aa3]">Synthesizing {completedCount * 3}+ domain claims</p>
+            </div>
+          </div>
+          
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-sm font-medium text-[#9ba8c2]">Council Consensus Map</p>
+            <span className="font-mono text-xl font-bold text-amber-400">{agreement}%</span>
+          </div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.04]">
+            <motion.div 
+              initial={{ width: 0 }} animate={{ width: `${agreement}%` }} transition={{ duration: 1, delay: 0.8 }}
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500" 
+            />
+          </div>
+          
+          <div className="mt-6 grid grid-cols-2 gap-3">
+             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
+               <ShieldCheck className="mx-auto h-5 w-5 text-emerald-400" />
+               <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-emerald-300/70">Seals</p>
+               <p className="text-lg font-bold text-emerald-100">{session.seals.length}</p>
+             </div>
+             <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center">
+               <GitBranch className="mx-auto h-5 w-5 text-rose-400" />
+               <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-rose-300/70">Disputes</p>
+               <p className="text-lg font-bold text-rose-100">{session.disputes.length}</p>
+             </div>
+          </div>
+        </motion.div>
+
+        {/* Dynamic Cabinet Map */}
+        <motion.div 
+          initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.7 }}
+          className="rounded-3xl border border-[#27324a] bg-gradient-to-b from-[#141a29] to-[#0c0e14] p-6 shadow-xl"
+        >
+          <div className="mb-4 flex items-center gap-2">
+            <Users className="h-5 w-5 text-amber-500" />
+            <h3 className="font-semibold text-slate-100">Live Cabinet Activity</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {[
+              { id: "C1_LEGAL", label: "Legal", desc: "Treaties & Doctrine", icon: "⚖️" },
+              { id: "C2_ECONOMIC", label: "Economic", desc: "Fiscal Tradeoffs", icon: "📈" },
+              { id: "C3_STRATEGIC", label: "Strategic", desc: "Geopolitics", icon: "♟️" },
+              { id: "C4_SOCIAL", label: "Social", desc: "Demographics", icon: "👥" },
+              { id: "C5_HISTORICAL", label: "Historical", desc: "Precedents", icon: "🏛️" },
+              { id: "C6_OPPOSITION", label: "Opposition", desc: "Adversarial Stress", icon: "🔥" },
+            ].map((c) => {
+              const councillorId = c.id as RetrievingCouncillorId;
+              const councillor = session.councillors[councillorId];
+              const isActive = councillor?.status === "complete" || councillor?.status === "running";
+              const isComplete = councillor?.status === "complete";
+              return (
+                <div key={c.label} className={`relative overflow-hidden rounded-xl border p-3 transition-all duration-300 ${isActive ? 'border-[#3b6fd4]/30 bg-[#3b6fd4]/5' : 'border-white/[0.04] bg-white/[0.02]'}`}>
+                  <div className="flex items-start justify-between">
+                    <span className="text-lg opacity-80">{c.icon}</span>
+                    {isComplete && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+                    {!isComplete && isActive && <span className="flex h-2 w-2 rounded-full bg-[#3b6fd4] shadow-[0_0_8px_rgba(59,111,212,0.8)] animate-ping" />}
+                  </div>
+                  <p className={`mt-2 text-xs font-bold ${isActive ? 'text-slate-200' : 'text-[#7f8aa3]'}`}>{c.label}</p>
+                  <p className="mt-0.5 text-[9px] uppercase tracking-wider text-[#7f8aa3]">{c.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Individual Councillor Outputs */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {RETRIEVING_COUNCILLOR_IDS.map((id, idx) => (
+          <motion.div key={id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 + (idx * 0.1) }}>
+            <CouncillorCard councillorId={id} output={session.councillors[id]} />
+          </motion.div>
         ))}
       </div>
-      <DeliberationBoard seals={session.seals} disputes={session.disputes} agreementScore={session.agreement_score} />
-      <FloorStrategyPanel verdict={session.verdict} />
-      <ChiefVerdictPanel verdict={session.verdict} stream={session.chief_verdict_stream} />
-      <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.055] p-4 text-sm text-amber-50">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Council Dossier</p>
-            <p className="mt-1 text-[#d8cda9]">Package the verdict, conflict lines, POIs, and chamber strategy into a usable floor brief.</p>
+      
+      {/* Deliberation Board */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.4 }}>
+        <DeliberationBoard seals={session.seals} disputes={session.disputes} agreementScore={session.agreement_score} />
+      </motion.div>
+
+      {/* Floor Strategy and Verdict */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.5 }}>
+         <FloorStrategyPanel verdict={session.verdict} />
+      </motion.div>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.6 }}>
+         <ChiefVerdictPanel verdict={session.verdict} stream={session.chief_verdict_stream} />
+      </motion.div>
+
+    </motion.section>
+  );
+}
+
+function CouncilPhaseRail({ steps }: { steps: Array<{ label: string; description: string; state: "done" | "active" | "pending" }> }) {
+  return (
+    <div className="relative mt-8">
+      <div className="absolute left-0 top-6 h-0.5 w-full bg-white/[0.04]" />
+      <div className="relative grid grid-cols-4 gap-4">
+        {steps.map((step, index) => (
+          <div key={step.label} className="relative z-10 flex flex-col items-center text-center">
+            <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border-2 transition-all duration-500 shadow-xl ${
+              step.state === "done" ? "border-emerald-500 bg-emerald-500/20 text-emerald-400" :
+              step.state === "active" ? "border-[#3b6fd4] bg-[#3b6fd4]/20 text-[#3b6fd4] shadow-[0_0_20px_rgba(59,111,212,0.4)]" :
+              "border-white/10 bg-black/50 text-[#7f8aa3]"
+            }`}>
+              {step.state === "done" ? <CheckCircle2 className="h-5 w-5" /> : <span className="text-sm font-bold">{index + 1}</span>}
+            </div>
+            <p className={`text-xs font-bold uppercase tracking-widest ${step.state === "active" ? "text-slate-200" : "text-[#7f8aa3]"}`}>{step.label}</p>
+            <p className="mt-1 hidden text-[10px] text-[#7f8aa3] sm:block">{step.description}</p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => downloadCouncilDossier(session)}
-            disabled={session.status !== "complete"}
-            className="border-amber-300/30 bg-black/20 text-amber-100 hover:bg-amber-300/10 hover:text-amber-50"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Strategy Brief
-          </Button>
-        </div>
+        ))}
       </div>
-    </section>
-  );
-}
-
-function HeaderStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-muted/30 p-3 dark:border-white/[0.07] dark:bg-black/25">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground dark:text-[#7f8aa3]">{label}</p>
-      <p className="mt-1 break-words text-sm leading-5 text-foreground dark:text-[#e5ebfb]">{value}</p>
-    </div>
-  );
-}
-
-function CouncilPhaseRail({
-  steps,
-}: {
-  steps: Array<{ label: string; description: string; state: "done" | "active" | "pending" }>;
-}) {
-  return (
-    <div className="mt-4 grid gap-2 sm:grid-cols-4">
-      {steps.map((step, index) => (
-        <div
-          key={step.label}
-          className={
-            step.state === "done"
-              ? "rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3"
-              : step.state === "active"
-                ? "rounded-lg border border-[#3b6fd4]/40 bg-[#3b6fd4]/10 p-3 shadow-[0_0_0_1px_rgba(59,111,212,0.08)]"
-                : "rounded-lg border border-border/60 bg-muted/20 p-3"
-          }
-        >
-          <div className="flex items-center gap-2">
-            <span className={
-              step.state === "done"
-                ? "flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white"
-                : step.state === "active"
-                  ? "flex h-5 w-5 items-center justify-center rounded-full bg-[#3b6fd4] text-[10px] font-bold text-white"
-                  : "flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground"
-            }>
-              {index + 1}
-            </span>
-            <p className="text-xs font-semibold text-foreground">{step.label}</p>
-          </div>
-          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{step.description}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CouncilPurposePanel({ completedCount, agreementScore }: { completedCount: number; agreementScore: number }) {
-  const agreement = Math.max(0, Math.min(100, Math.round(agreementScore || 0)));
-  return (
-    <div className="rounded-2xl border border-border/70 bg-background/90 p-4 shadow-sm dark:border-[#27324a] dark:bg-black/20">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold text-foreground dark:text-slate-50">What Council Mode Does</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">It turns raw evidence into a debate-ready strategic brief through forced specialization.</p>
-        </div>
-        <GitBranch className="h-4 w-4 text-amber-600 dark:text-amber-200" />
-      </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <PurposeMetric icon={FileText} label="Briefs" value={`${completedCount}/6`} />
-        <PurposeMetric icon={ShieldCheck} label="Agreement" value={`${agreement}%`} />
-        <PurposeMetric icon={Scale} label="Output" value="Chief verdict" />
-      </div>
-      <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 p-3 text-[12px] leading-5 text-muted-foreground">
-        Councillors retrieve and argue from different domains, then the deliberation layer exposes endorsed claims, contested claims, POIs, speech strategy, and vulnerabilities.
-      </div>
-    </div>
-  );
-}
-
-function PurposeMetric({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-      <Icon className="h-4 w-4 text-[#3b6fd4]" />
-      <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold text-foreground">{value}</p>
     </div>
   );
 }
@@ -213,33 +259,17 @@ function buildCouncilPhases(status: CouncilSession["status"], completedCount: nu
   const order: CouncilSession["status"][] = ["expanding", "retrieving", "briefing", "deliberating", "synthesizing", "complete"];
   const activeIndex = Math.max(0, order.indexOf(status));
   return [
-    {
-      label: "Assign",
-      description: "Topic is split into councillor mandates.",
-      state: activeIndex > 0 || completedCount > 0 ? "done" : "active",
-    },
-    {
-      label: "Retrieve",
-      description: "Six briefs collect evidence and claims.",
-      state: completedCount === 6 || activeIndex > 2 ? "done" : activeIndex >= 1 ? "active" : "pending",
-    },
-    {
-      label: "Deliberate",
-      description: "Council seals, disputes, and weak points are compared.",
-      state: activeIndex > 3 ? "done" : activeIndex === 3 ? "active" : "pending",
-    },
-    {
-      label: "Verdict",
-      description: "Chief synthesizes floor strategy and speech ammunition.",
-      state: status === "complete" ? "done" : activeIndex >= 4 ? "active" : "pending",
-    },
+    { label: "Assign", description: "Orchestrating agents", state: activeIndex > 0 || completedCount > 0 ? "done" : "active" },
+    { label: "Retrieve", description: "Parallel domain research", state: completedCount === 6 || activeIndex > 2 ? "done" : activeIndex >= 1 ? "active" : "pending" },
+    { label: "Deliberate", description: "Mathematical clash mapping", state: activeIndex > 3 ? "done" : activeIndex === 3 ? "active" : "pending" },
+    { label: "Verdict", description: "Synthesizing floor strategy", state: status === "complete" ? "done" : activeIndex >= 4 ? "active" : "pending" },
   ] as Array<{ label: string; description: string; state: "done" | "active" | "pending" }>;
 }
 
 function statusCopy(status: CouncilSession["status"]): string {
-  if (status === "briefing") return "Chamber Active";
-  if (status === "deliberating") return "Deliberation Running";
-  if (status === "synthesizing") return "Strategy Synthesizing";
-  if (status === "complete") return "Chamber Concluded";
-  return "Council Error";
+  if (status === "briefing") return "Agents Retrieving & Briefing";
+  if (status === "deliberating") return "Deliberation Engine Running";
+  if (status === "synthesizing") return "Chief Strategy Synthesizing";
+  if (status === "complete") return "Council Chamber Concluded";
+  return "Council Initializing";
 }

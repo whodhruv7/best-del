@@ -14,7 +14,7 @@ export interface EarlyStoppingResult {
 }
 
 const TARGETS: Record<ResearchMode, { minEligible: number; minBuckets: number }> = {
-  fast_research: { minEligible: 40, minBuckets: 5 },
+  fast_research: { minEligible: 20, minBuckets: 5 },
   deep_research: { minEligible: 80, minBuckets: 7 },
   council: { minEligible: 180, minBuckets: 8 },
 };

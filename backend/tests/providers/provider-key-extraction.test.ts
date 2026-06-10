@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractProviderKeys } from "../../src/core/providers/provider-key-extraction.js";
+import { extractProviderKeys, type ProviderKeyEnv } from "../../src/core/providers/provider-key-extraction.js";
 
 test("extractProviderKeys trims values and accepts header arrays case-insensitively", () => {
   const keys = extractProviderKeys({
@@ -70,4 +70,33 @@ test("extractProviderKeys supports server env fallback", () => {
   assert.equal(keys.braveKey, "brave-env");
   assert.equal(keys.jinaKey, "jina-env");
   assert.equal(keys.hfToken, "hf-env");
+});
+
+test("extractProviderKeys uses numbered rollback keys without comma joining", () => {
+  const keys = extractProviderKeys({ headers: {} }, {
+    GROQ_API_KEY_1: "gsk-env-1",
+    GROQ_API_KEY_2: "gsk-env-2",
+    OPENROUTER_API_KEY_1: "or-env-1",
+    TAVILY_API_KEY_1: "tvly-env-1",
+    TAVILY_API_KEY_2: "tvly-env-2",
+    FIRECRAWL_API_KEY_1: "fc-env-1",
+  } as ProviderKeyEnv);
+
+  assert.equal(keys.groqKey, "gsk-env-1");
+  assert.equal(keys.openrouterKey, "or-env-1");
+  assert.equal(keys.tavilyKey, "tvly-env-1");
+  assert.equal(keys.firecrawlKey, "fc-env-1");
+  assert.ok(!keys.tavilyKey?.includes(","));
+});
+
+test("extractProviderKeys ignores placeholder rollback values", () => {
+  const keys = extractProviderKeys({ headers: {} }, {
+    TAVILY_API_KEY_1: "your_tavily_api_key_1",
+    TAVILY_API_KEY_2: "tvly-env-2",
+    FIRECRAWL_API_KEY_1: "insert_firecrawl_key",
+    FIRECRAWL_API_KEY_2: "fc-env-2",
+  } as ProviderKeyEnv);
+
+  assert.equal(keys.tavilyKey, "tvly-env-2");
+  assert.equal(keys.firecrawlKey, "fc-env-2");
 });

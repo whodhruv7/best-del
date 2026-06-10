@@ -110,7 +110,9 @@ function loadModelList(key: string, defaultModel: string): string[] {
   try {
     const saved = JSON.parse(localStorage.getItem(key) ?? "[]");
     if (Array.isArray(saved) && saved.length > 0 && saved.every((model) => typeof model === "string") && VALID_MODEL_PREFIXES.some((prefix) => saved[0]?.startsWith(prefix))) {
-      const stable = saved.filter((model) => !isKnownUnstableResearchModel(model));
+      const stable = saved
+        .map(normalizeStoredModelId)
+        .filter((model) => !isKnownUnstableResearchModel(model));
       return stable.length > 0 ? stable : [defaultModel];
     }
   } catch {}
@@ -119,4 +121,12 @@ function loadModelList(key: string, defaultModel: string): string[] {
 
 export function isKnownUnstableResearchModel(model: string): boolean {
   return UNSTABLE_RESEARCH_MODEL_PATTERN.test(model);
+}
+
+function normalizeStoredModelId(model: string): string {
+  const trimmed = model.trim();
+  if (/^nvidia\/nvidia\//i.test(trimmed)) return trimmed;
+  if (/^nvidia\/(?:llama-|nemotron-)/i.test(trimmed)) return `nvidia/${trimmed}`;
+  if (/^(?:llama-.*nemotron|nemotron-)/i.test(trimmed)) return `nvidia/nvidia/${trimmed}`;
+  return trimmed;
 }

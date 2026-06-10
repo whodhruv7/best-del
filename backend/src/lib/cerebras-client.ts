@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { multiKeyFetch } from "./multi-key-fetch.js";
 
 export const CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1";
 
@@ -23,6 +24,7 @@ export function getCerebrasClient(overrideKey?: string | null): OpenAI {
     baseURL: CEREBRAS_BASE_URL,
     timeout: 30_000,
     maxRetries: 2,
+    fetch: multiKeyFetch as any,
   });
 }
 

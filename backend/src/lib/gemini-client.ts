@@ -3,6 +3,7 @@
 // Gemini provider via Google's OpenAI-compatible endpoint.
 // ─────────────────────────────────────────────────────────────
 import OpenAI from "openai";
+import { multiKeyFetch } from "./multi-key-fetch.js";
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 
@@ -19,7 +20,7 @@ export function getGeminiClient(apiKey?: string | null): OpenAI {
       "Set GEMINI_API_KEY in .env or pass X-Gemini-Api-Key header."
     );
   }
-  return new OpenAI({ apiKey: key, baseURL: GEMINI_BASE_URL });
+  return new OpenAI({ apiKey: key, baseURL: GEMINI_BASE_URL, fetch: multiKeyFetch as any });
 }
 
 /**

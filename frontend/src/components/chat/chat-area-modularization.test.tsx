@@ -26,7 +26,8 @@ test("stale stream guard remains scoped by run, assistant, and conversation iden
   const normalizer = await readFile(new URL("./stream-event-normalizer.ts", import.meta.url), "utf8");
   const guard = await readFile(new URL("./stale-event-guard.ts", import.meta.url), "utf8");
 
-  assert.match(runController, /activeRunRef/);
+  assert.match(runController, /globalStreamRegistry/);
+  assert.match(runController, /setActiveRun/);
   assert.match(normalizer, /isStaleRunScopedEvent/);
   assert.match(guard, /sameRun/);
   assert.match(guard, /sameAssistant/);

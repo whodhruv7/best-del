@@ -1,92 +1,92 @@
-```
 # Dependencies
 node_modules/
 
-# Build outputs
+# Build artifacts
 dist/
-build/
-.next/
-.nuxt/
-public/dist/
-frontend/build/
-frontend/dist/
-
-# Logs
-*.log
-
-# SQLite runtime data
-*.db
-*.db-shm
-*.db-wal
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
 
 # Environment variables
 .env
 .env.local
 .env.*
-!.env.example
+
+# IDE and editor settings
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Compiled files
+*.pyc
+__pycache__/
+
+# Processed by esbuild
+backend/node_modules/.bin/esbuild
+
+# Package lock file
+backend/node_modules/.package-lock.json
 
 # OS generated files
 .DS_Store
 Thumbs.db
 
-# IDE specific
-.vscode/
-.idea/
-*.swp
-*.swo
+# Coverage reports
+coverage/
+htmlcov/
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
+# Python virtual environments
 venv/
 .venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.gitattributes
 
-# Node.js
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-node_modules/
-jspm_packages/
+# TypeScript build output
 *.tsbuildinfo
-.nyc_output
+
+# Supabase local state (if applicable)
+supabase/.temp/
+supabase/.branches/
+backend/data/bestdel.local-db.json
+
+# Generated smoke-test artifacts
+backend/live-fast_research-*.md
+backend/live-fast_research-*.json
+backend/scratch/
+
+# Vitest cache
+node_modules/.cache/vitest
+
+# Local Supabase config might be in .env files which are already covered
+
+# Additional common ignores
+*.env.local
+.env.production
+.env.development
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+node_modules/
 coverage/
 .nyc_output/
-coverage/
-
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
-
-# Next.js
-.next
-out/
-.next/
-.next/**/*
-!.next/static
-!.next/static/**
-!.next/server
-!.next/server/**
-
-# Temporary files
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.vscode/
+.idea/
+dist/
+build/
+*.pyc
+__pycache__/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.log
 *.tmp
-*.temp
-*~
-```
+.env
+.env.local
+.env.*
+*.env.*

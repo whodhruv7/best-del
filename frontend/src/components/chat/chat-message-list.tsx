@@ -166,39 +166,51 @@ export function CitationMessage({
           )
         )}
       </div>
-      {sourcesBlock && sourceLines.length > 0 && (
+      {((sourcesBlock && sourceLines.length > 0) || (sources && sources.length > 0)) && (
         <details className="not-prose mt-3 overflow-hidden rounded-lg border">
           <summary className="cursor-pointer select-none bg-muted/50 px-3 py-2 text-xs font-semibold hover:bg-muted">
-            Sources ({sourceLines.length})
+            Sources ({sourceLines.length || sources.length})
           </summary>
           <div className="p-3 space-y-1.5">
-            {sourceLines.map((line, i) => {
-              // Fix: URL regex handles parentheses (Wikipedia URLs) (Bug: L128)
-              const urlMatch = line.match(/https?:\/\/[^\s)>\]]+/);
-              const url = urlMatch?.[0]?.replace(/[),.;\]]+$/, "");
-              // Fix: show ALL sources, not just http ones; non-http shown as text (Bug: L98)
-              // Fix: bibliography index is preserved from original line, not re-indexed (Bug: L127)
-              const originalIndex = line.match(/^\[?(\d+)\]?\.?\s/)?.[1];
-              const label = originalIndex ? `[${originalIndex}]` : `[${i + 1}]`;
+            {sourceLines.length > 0 ? (
+              sourceLines.map((line, i) => {
+                const urlMatch = line.match(/https?:\/\/[^\s)>\]]+/);
+                const url = urlMatch?.[0]?.replace(/[),.;\]]+$/, "");
+                const originalIndex = line.match(/^\[?(\d+)\]?\.?\s/)?.[1];
+                const label = originalIndex ? `[${originalIndex}]` : `[${i + 1}]`;
 
-              return (
+                return (
+                  <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <span className="font-mono shrink-0 text-[#6f93e8]">{label}</span>
+                    {url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline hover:text-foreground break-all"
+                      >
+                        {url}
+                      </a>
+                    ) : (
+                      <span className="break-words">{line.replace(/^\[?\d+\]?\.?\s*/, "")}</span>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              sources.map((s, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <span className="font-mono shrink-0 text-[#6f93e8]">{label}</span>
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:underline hover:text-foreground break-all"
-                    >
-                      {url}
+                  <span className="font-mono shrink-0 text-[#6f93e8]">[{s.sourceId ?? i + 1}]</span>
+                  {s.url ? (
+                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-foreground break-all">
+                      {s.title || s.url}
                     </a>
                   ) : (
-                    <span className="break-words">{line.replace(/^\[?\d+\]?\.?\s*/, "")}</span>
+                    <span className="break-words">{s.title || "Unknown source"}</span>
                   )}
                 </div>
-              );
-            })}
+              ))
+            )}
           </div>
         </details>
       )}

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { PenLine, Mic2, Globe, Layers, Users, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, PenLine, Mic2, Globe, Layers, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type ChatModeChipId = "drafting" | "rhetorics" | "fast" | "deep" | "council";
@@ -57,19 +57,70 @@ export interface ChatModeChipsProps {
 }
 
 export function ChatModeChips({ activeId, onSelect, className }: ChatModeChipsProps) {
+  const scrollerRef = React.useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = React.useState(false);
+  const [canScrollRight, setCanScrollRight] = React.useState(false);
+
+  const updateScrollState = React.useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+
+  React.useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [updateScrollState]);
+
+  React.useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[aria-selected="true"]');
+    active?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    window.setTimeout(updateScrollState, 220);
+  }, [activeId, updateScrollState]);
+
+  const scrollModes = (direction: "left" | "right") => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({
+      left: direction === "left" ? -160 : 160,
+      behavior: "smooth",
+    });
+  };
+
   return (
-    <div
-      role="tablist"
-      aria-label="Chat mode"
-      className={cn(
-        "flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto",
-        className,
-      )}
-    >
-      {CHAT_MODE_CHIPS.map((chip) => {
-        const Icon = chip.icon;
-        const active = chip.id === activeId;
-        return (
+    <div className={cn("flex min-w-0 flex-1 items-center gap-1", className)}>
+      <button
+        type="button"
+        onClick={() => scrollModes("left")}
+        disabled={!canScrollLeft}
+        aria-label="Previous modes"
+        className={cn(
+          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/85 text-muted-foreground shadow-sm transition sm:hidden",
+          canScrollLeft ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </button>
+      <div
+        ref={scrollerRef}
+        role="tablist"
+        aria-label="Chat mode"
+        className="no-scrollbar flex min-w-0 flex-1 snap-x items-center gap-1.5 overflow-x-auto scroll-smooth px-0.5 [touch-action:pan-x]"
+      >
+        {CHAT_MODE_CHIPS.map((chip) => {
+          const Icon = chip.icon;
+          const active = chip.id === activeId;
+          return (
           <button
             key={chip.id}
             role="tab"
@@ -77,7 +128,7 @@ export function ChatModeChips({ activeId, onSelect, className }: ChatModeChipsPr
             aria-selected={active}
             onClick={() => onSelect(chip.id)}
             className={cn(
-              "group/chip relative flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-all",
+              "group/chip relative flex h-8 shrink-0 snap-start items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-all sm:h-7",
               "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/60",
               active
                 ? "border-amber-500/70 bg-amber-500/10 text-amber-700 shadow-[0_0_0_1px_rgba(212,160,59,0.18)] dark:text-amber-100"
@@ -101,8 +152,21 @@ export function ChatModeChips({ activeId, onSelect, className }: ChatModeChipsPr
             />
             <span className="whitespace-nowrap">{chip.label}</span>
           </button>
-        );
-      })}
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => scrollModes("right")}
+        disabled={!canScrollRight}
+        aria-label="More modes"
+        className={cn(
+          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/85 text-muted-foreground shadow-sm transition sm:hidden",
+          canScrollRight ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }

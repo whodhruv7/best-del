@@ -41,7 +41,19 @@ export async function apiFetch(
       const response = await fetch(input, { ...init, headers: merged });
       // Retry on 5xx server errors and 429 rate limits
       if ((response.status >= 500 || response.status === 429) && attempt < retries) {
-        const delay = RETRY_DELAY_BASE_MS * Math.pow(2, attempt);
+        const urlStr = typeof input === "string" ? input : input.toString();
+        // Don't auto-retry 429 on /messages endpoint — surface to UI for user action
+        if (response.status === 429 && urlStr.includes("/messages")) {
+          return response;
+        }
+        let delay = RETRY_DELAY_BASE_MS * Math.pow(2, attempt);
+        if (response.status === 429) {
+          const retryAfter = response.headers.get("Retry-After");
+          if (retryAfter) {
+            const secs = Number(retryAfter);
+            if (!Number.isNaN(secs)) delay = secs * 1000;
+          }
+        }
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }

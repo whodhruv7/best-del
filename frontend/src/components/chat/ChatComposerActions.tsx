@@ -41,7 +41,7 @@ export function ChatComposerActions({
   const showStop = isStreaming;
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex shrink-0 items-center gap-1.5 sm:gap-2", className)}>
       {/* Enhance button (left) */}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -52,8 +52,8 @@ export function ChatComposerActions({
             onClick={onEnhance}
             disabled={!trimmed || isEnhancing || isStreaming || disabled}
             className={cn(
-              "h-8 gap-1.5 rounded-lg px-2.5 text-xs text-[#9a9ab0] hover:bg-white/[0.04] hover:text-[#d4a03b]",
-              trimmed && !isEnhancing && !isStreaming && "text-[#d4a03b]",
+              "h-8 gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted/70 hover:text-[#8a5b13] sm:px-2.5 dark:text-[#9a9ab0] dark:hover:bg-white/[0.04] dark:hover:text-[#d4a03b]",
+              trimmed && !isEnhancing && !isStreaming && "text-[#8a5b13] dark:text-[#d4a03b]",
             )}
             aria-label="Enhance prompt with AI"
             data-testid="button-enhance-prompt"
@@ -71,7 +71,7 @@ export function ChatComposerActions({
 
       {/* Char counter with ring (middle) */}
       <div
-        className="flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.02] px-2 py-1"
+        className="hidden items-center gap-1.5 rounded-full border border-border/60 bg-background/65 px-2 py-1 min-[380px]:flex dark:border-white/5 dark:bg-white/[0.02]"
         data-testid="char-counter"
         title={`${length} / ${maxLength} chars`}
       >
@@ -83,7 +83,7 @@ export function ChatComposerActions({
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
-            className="text-white/10"
+            className="text-muted-foreground/20 dark:text-white/10"
           />
           <circle
             cx="10"
@@ -112,7 +112,7 @@ export function ChatComposerActions({
               ? "text-red-400 font-medium"
               : isWarn
                 ? "text-amber-300 font-medium"
-                : "text-[#8b8b9f]",
+                : "text-muted-foreground dark:text-[#8b8b9f]",
           )}
         >
           {length}/{maxLength}
@@ -148,10 +148,10 @@ export function ChatComposerActions({
               aria-label="Send message"
               title="Send message"
               className={cn(
-                "h-9 w-9 rounded-xl text-white transition-all",
+                "h-10 w-10 rounded-xl text-white transition-all sm:h-9 sm:w-9",
                 trimmed && !isDanger
                   ? "bg-[#d4a03b] text-[#111215] shadow-[0_12px_28px_rgba(212,160,59,0.32)] hover:bg-[#f3c76f]"
-                  : "bg-white/[0.04] text-[#4a4a5e] hover:bg-white/[0.06]",
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 dark:bg-white/[0.04] dark:text-[#4a4a5e] dark:hover:bg-white/[0.06]",
               )}
               data-testid="button-send-message"
             >

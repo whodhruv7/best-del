@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { multiKeyFetch } from "./multi-key-fetch.js";
 
 export const OPENAI_CATALOG = [
   { id: "gpt-4.1", name: "GPT-4.1", badge: "flagship", contextWindow: 1047576 },
@@ -19,6 +20,7 @@ export function getOpenAIClient(overrideKey?: string | null): OpenAI {
     apiKey: key,
     timeout: 60_000,
     maxRetries: 2,
+    fetch: multiKeyFetch as any,
   });
 }
 

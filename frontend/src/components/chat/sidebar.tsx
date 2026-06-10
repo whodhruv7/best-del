@@ -173,7 +173,7 @@ function ConversationRow({ conv, isActive, onSelect, onDelete, onRename }: Conve
             className={cn(
               "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
               isActive
-                ? "border-white/18 bg-white/10 text-white"
+                ? "border-[#3b6fd430] bg-[#3b6fd418] text-[#244a7b] dark:border-white/18 dark:bg-white/10 dark:text-white"
                 : "border-[#10182814] bg-white/60 text-muted-foreground dark:border-sidebar-border/60 dark:bg-background/60",
             )}
           >
@@ -240,14 +240,14 @@ function ArchiveCard({ archive, isActive, onSelect }: ArchiveCardProps) {
     <motion.button
       type="button"
       onClick={onSelect}
-      whileHover={{ x: 2, backgroundColor: "rgba(255,255,255,0.04)" }}
+      whileHover={{ x: 2 }}
       whileTap={{ scale: 0.98 }}
       transition={{ duration: 0.15 }}
       className={cn(
-        "group relative w-full rounded-lg border px-3 py-3 text-left transition-all",
+        "group relative w-full rounded-xl border px-3 py-3 text-left transition-all",
         isActive
           ? "border-[#3b6fd430] bg-[#3b6fd414] text-sidebar-foreground shadow-sm dark:bg-[#1a1c22] dark:text-[#eeeef5]"
-          : "border-transparent bg-transparent text-muted-foreground hover:text-foreground",
+          : "border-transparent bg-transparent text-muted-foreground hover:border-[#10182814] hover:bg-white/55 hover:text-foreground dark:hover:bg-[#111215]",
       )}
       data-testid={`button-archive-${archive.id}`}
     >
@@ -270,8 +270,8 @@ function ArchiveCard({ archive, isActive, onSelect }: ArchiveCardProps) {
           <ArchiveIcon className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className={cn("truncate text-sm font-medium", isActive ? "text-white" : "text-foreground dark:text-[#eeeef5]")}>{archive.name}</div>
-          <div className={cn("mt-1 line-clamp-2 text-[11px] leading-4", isActive ? "text-white/70" : "text-muted-foreground dark:text-[#6b6b82]")}>
+          <div className={cn("truncate text-sm font-medium", isActive ? "text-[#244a7b] dark:text-white" : "text-foreground dark:text-[#eeeef5]")}>{archive.name}</div>
+          <div className={cn("mt-1 line-clamp-2 text-[11px] leading-4", isActive ? "text-[#415168] dark:text-white/70" : "text-muted-foreground dark:text-[#6b6b82]")}>
             {archive.topic?.trim() || "Workspace archive"}
           </div>
         </div>
@@ -348,13 +348,13 @@ function SharedSidebarContent({
   const activeArchive = archives.find((archive) => archive.id === activeArchiveId) ?? null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white/82 backdrop-blur-2xl dark:bg-[#0d0e12]">
+    <div className="flex h-full max-h-dvh min-h-0 flex-col bg-white/88 backdrop-blur-2xl dark:bg-[#0d0e12]">
       <div className="h-0.5 shrink-0 bg-gradient-to-r from-[#3b6fd4] via-[#d4a03b] to-transparent" aria-hidden />
 
       <div
         className={cn(
-          "shrink-0 border-b border-[#10182814] dark:border-[#1e2028]",
-          isMobile ? "p-4" : "px-5 py-4",
+          "shrink-0 overflow-hidden border-b border-[#10182814] dark:border-[#1e2028]",
+          isMobile ? "max-h-[50dvh] p-4" : "max-h-[54dvh] px-5 py-4",
         )}
       >
         <div className="flex items-start justify-between gap-3">
@@ -363,7 +363,7 @@ function SharedSidebarContent({
               BestDel Intelligence Desk
             </p>
             <h2 className="mt-1 text-base font-semibold text-foreground dark:text-[#eeeef5]">Dossier navigation</h2>
-            <p className="mt-1 text-xs text-muted-foreground dark:text-[#6b6b82]">
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground dark:text-[#6b6b82]">
               {activeArchive ? activeArchive.topic || activeArchive.name : "Choose an archive to begin."}
             </p>
           </div>
@@ -382,7 +382,7 @@ function SharedSidebarContent({
         {isMobile && (
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button
-              className="justify-start gap-2 rounded-xl shadow-sm"
+              className="h-11 justify-start gap-2 rounded-xl shadow-sm"
               onClick={() => activeArchiveId && handleSelectConversation(null)}
               disabled={!activeArchiveId}
               data-testid="button-new-chat"
@@ -392,7 +392,7 @@ function SharedSidebarContent({
             </Button>
             <Button
               variant="outline"
-              className="justify-start gap-2 rounded-xl bg-background/80"
+              className="h-11 justify-start gap-2 rounded-xl bg-background/80"
               onClick={() => {
                 onCreateArchive?.();
                 onMobileClose?.();
@@ -410,7 +410,7 @@ function SharedSidebarContent({
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-[#6b6b82]">Dossiers</p>
             {activeArchive && <span className="text-[11px] text-muted-foreground dark:text-[#6b6b82]">Active brief</span>}
           </div>
-          <div className="grid gap-2">
+          <div className={cn("grid gap-2 pr-1", isMobile ? "max-h-36 overflow-y-auto overscroll-contain" : "max-h-44 overflow-y-auto overscroll-contain")}>
             {archives.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-sidebar-border/60 px-4 py-5 text-xs text-muted-foreground">
                 No dossiers yet. Create one to organize your workspace.
@@ -440,7 +440,7 @@ function SharedSidebarContent({
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
         <div className={cn("space-y-3", isMobile ? "p-4" : "px-5 py-4")}>
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-[#6b6b82]">Conversations</p>
@@ -478,8 +478,8 @@ function SharedSidebarContent({
 
       <div
         className={cn(
-          "shrink-0 border-t border-[#10182814] dark:border-[#1e2028]",
-          isMobile ? "p-4" : "px-5 py-4",
+          "shrink-0 overflow-y-auto border-t border-[#10182814] dark:border-[#1e2028]",
+          isMobile ? "max-h-[34dvh] p-4" : "max-h-[36dvh] px-5 py-4",
         )}
       >
         <div className="rounded-xl border border-[#10182814] bg-white/65 p-3 shadow-[0_8px_24px_rgba(16,24,40,0.04)] dark:border-[#1e2028] dark:bg-[#111215]">
@@ -687,7 +687,7 @@ export function Sidebar({
       />
 
       <Sheet open={mobileOpen} onOpenChange={(open) => !open && onMobileClose?.()}>
-        <SheetContent side="left" className="w-72 border-r border-sidebar-border/60 p-0 sm:w-80">
+        <SheetContent side="left" className="h-dvh w-[min(92vw,22rem)] overflow-hidden border-r border-sidebar-border/60 p-0 sm:w-80">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SharedSidebarContent
             activeConversationId={activeConversationId}

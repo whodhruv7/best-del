@@ -39,7 +39,7 @@ test("fast_research source gaps do not downgrade far-short mode-depth or source-
 });
 
 test("fast_research source gaps can downgrade only a near-miss cited-source count", () => {
-  const sourceIds = Array.from({ length: 32 }, (_, index) => index + 1);
+  const sourceIds = Array.from({ length: 18 }, (_, index) => index + 1);
   const classes = ["official_government", "parliamentary_records", "legal_commentary"] as const;
   const buckets = ["government_official", "parliamentary_records", "court_legal"] as const;
   const registry = {

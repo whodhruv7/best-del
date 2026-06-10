@@ -1,4 +1,4 @@
-﻿// src/lib/web-search.ts
+// src/lib/web-search.ts
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Cascading web search for the MUN Research Engine.
 //
@@ -18,6 +18,7 @@ import { LRUCache } from "lru-cache";
 import type { DimensionScore, SearchResult, CourtJudgement } from "./types.js";
 import { canonicalizeUrl, scoreRelevance, type TopicType } from "./rag.js";
 import { logger } from "./logger.js";
+import { multiKeyFetch } from "./multi-key-fetch.js";
 import { cacheGet, cacheSet } from "./cache.js";
 import { telemetry } from "./telemetry.js";
 import { buildAgendaContract } from "../core/agenda/agenda-contract.js";
@@ -31,7 +32,7 @@ const GOV_IN_SKIP_PATTERN = /\b(democratic space|press freedom|civil liberties|s
 export type { SearchResult, CourtJudgement } from "./types.js";
 
 type SearchEngine = "serper" | "exa" | "tavily" | "brave" | "ddg";
-type SearchKeys = { tavilyKey?: string | null; serperKey?: string | null; exaKey?: string | null; braveKey?: string | null };
+type SearchKeys = { tavilyKey?: string | null; serperKey?: string | null; exaKey?: string | null; braveKey?: string | null; abortSignal?: AbortSignal };
 type RawSearchResult = {
   title: string;
   url: string;
@@ -147,7 +148,7 @@ const IN_FLIGHT_DEEP = new Map<string, Promise<SearchResult[]>>();
 
 const LEGAL_QUERY_PATTERN = /\b(court|judg|verdict|article \d+|section \d+|ipc|crpc|uapa|sedition|constitution|writ|pil|sc|hc|supreme court|high court|tribunal|nclat|ncdrc)\b/i;
 
-// â”€â”€ Source Scoring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Source Scoring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Score a URL by source authority for Indian MUN research.
@@ -425,7 +426,7 @@ export function extractCourtJudgement(content: string, url: string): CourtJudgem
   return { isJudgement: true, caseName, caseNumber, year, court, bench, held, relevance, url };
 }
 
-// â”€â”€ Query Engineering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Query Engineering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Takes any user query and returns 6 engineered sub-queries targeting
@@ -461,10 +462,10 @@ async function fetchDualEngine(
   const hasSerper = !!serperKey;
   const hasExa = !!exaKey;
   const premiumFetches: Array<Promise<RawSearchResult[]>> = [];
-  if (hasSerper) premiumFetches.push(_fetchSerper(query, serperKey!));
-  if (hasExa) premiumFetches.push(_fetchExa(query, exaKey!, deep));
-  if (hasTavily) premiumFetches.push(_fetchTavily(query, tavilyKey!, deep));
-  if (hasBrave) premiumFetches.push(_fetchBrave(query, braveKey!, deep));
+  if (hasSerper) premiumFetches.push(_fetchSerper(query, serperKey!, keys?.abortSignal));
+  if (hasExa) premiumFetches.push(_fetchExa(query, exaKey!, deep, keys?.abortSignal));
+  if (hasTavily) premiumFetches.push(_fetchTavily(query, tavilyKey!, deep, 0, keys?.abortSignal));
+  if (hasBrave) premiumFetches.push(_fetchBrave(query, braveKey!, deep, keys?.abortSignal));
 
   if (premiumFetches.length > 0) {
     const settled = await Promise.allSettled(premiumFetches);
@@ -479,7 +480,7 @@ async function fetchDualEngine(
     "Set TAVILY_API_KEY + BRAVE_API_KEY in .env or in Settings → Keys. " +
     "Falling back to DDG Instant (near-zero parliamentary research quality)."
   );
-  return _fetchDdgInstant(query).catch(() => []);
+  return _fetchDdgInstant(query, keys?.abortSignal).catch(() => []);
 }
 
 function mergeRawResultsDualEngine(
@@ -590,7 +591,7 @@ function engineeredQueriesFromOfficialPlanner(query: string, engine: SearchEngin
   return selected;
 }
 
-// â”€â”€ Post-processing pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Post-processing pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Recency signal: extract the most recent year mentioned in the URL/title.
@@ -662,7 +663,7 @@ function postProcess(
   return results;
 }
 
-// â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Main search function. Call this from all route handlers.
@@ -685,6 +686,7 @@ export async function searchWeb(
     serperKey?: string | null;
     exaKey?: string | null;
     braveKey?: string | null;
+    abortSignal?: AbortSignal;
   },
   topic?: TopicType
 ): Promise<SearchResult[]> {
@@ -724,7 +726,7 @@ async function _doSearchWeb(
   let rawResults = await fetchDualEngine(q, keys, false);
 
   if (shouldSearchIndianKanoon(q, topic)) {
-    const legalResults = await searchIndianKanoon(q, topic).catch(() => [] as RawSearchResult[]);
+    const legalResults = await searchIndianKanoon(q, topic, keys?.abortSignal).catch(() => [] as RawSearchResult[]);
     rawResults = mergeRawResultsDualEngine(rawResults, legalResults as RawSearchResult[]);
   }
 
@@ -815,7 +817,7 @@ function applyResultLimit(results: SearchResult[], topic?: TopicType): SearchRes
 }
 
 /**
- * Deep search â€” runs Tavily advanced + DDG HTML in parallel for maximum coverage.
+ * Deep search — runs Tavily advanced + DDG HTML in parallel for maximum coverage.
  * Backward-compatible wrapper used by anthropic.ts orchestration layer.
  */
 export async function searchWebDeep(
@@ -825,6 +827,7 @@ export async function searchWebDeep(
     serperKey?: string | null;
     exaKey?: string | null;
     braveKey?: string | null;
+    abortSignal?: AbortSignal;
   },
   topic?: TopicType
 ): Promise<SearchResult[]> {
@@ -862,7 +865,7 @@ async function _doSearchWebDeep(
   let rawResults = await fetchDualEngine(q, keys, true);
 
   if (shouldSearchIndianKanoon(q, topic)) {
-    const legalResults = await searchIndianKanoon(q, topic).catch(() => [] as RawSearchResult[]);
+    const legalResults = await searchIndianKanoon(q, topic, keys?.abortSignal).catch(() => [] as RawSearchResult[]);
     rawResults = mergeRawResultsDualEngine(rawResults, legalResults as RawSearchResult[]);
   }
 
@@ -957,9 +960,9 @@ export function sourceBadge(r: SearchResult): string {
   if (u.includes("cag.gov.in"))  return "ðŸ“Š [CAG REPORT]";
   if (u.includes("ncrb.gov.in")) return "ðŸ”¢ [NCRB DATA]";
   if (u.includes("pib.gov.in"))  return "ðŸ“¢ [PIB OFFICIAL]";
-  if (r.sourceType === "court_judgement") return "âš–ï¸ [COURT]";
-  if (r.sourceType === "government_india" && r.score === 10) return "ðŸ›ï¸ [GOV.IN]";
-  if (r.sourceType === "government_international" && r.score === 10) return "ðŸŒ [INTL GOV]";
+  if (r.sourceType === "court_judgement") return "âš–ï¸  [COURT]";
+  if (r.sourceType === "government_india" && r.score === 10) return "ðŸ ›ï¸  [GOV.IN]";
+  if (r.sourceType === "government_international" && r.score === 10) return "ðŸŒ  [INTL GOV]";
   return "";
 }
 
@@ -1009,12 +1012,15 @@ function shouldSearchIndianKanoon(query: string, topic?: TopicType): boolean {
   );
 }
 
-export async function searchIndianKanoon(query: string, topic?: TopicType): Promise<SearchResult[]> {
+export async function searchIndianKanoon(query: string, topic?: TopicType, abortSignal?: AbortSignal): Promise<SearchResult[]> {
   const shouldSearch = shouldSearchIndianKanoon(query, topic);
   if (!shouldSearch) return [];
 
   const params = new URLSearchParams({ formInput: query.slice(0, 100), pagenum: "0" });
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (abortSignal?.aborted) controller.abort();
+  abortSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), 6000);
 
   let resp: Response;
@@ -1025,6 +1031,7 @@ export async function searchIndianKanoon(query: string, topic?: TopicType): Prom
       signal: controller.signal,
     });
   } finally {
+    abortSignal?.removeEventListener("abort", abortFromParent);
     clearTimeout(timeout);
   }
 
@@ -1051,24 +1058,28 @@ export async function searchIndianKanoon(query: string, topic?: TopicType): Prom
   });
 }
 
-// â”€â”€ Private fetch helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Private fetch helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function _fetchTavily(
   query: string,
   apiKey: string,
   deep = false,
-  retryCount = 0
+  retryCount = 0,
+  abortSignal?: AbortSignal
 ): Promise<RawSearchResult[]> {
   if (isCircuitOpen("tavily")) return [];
   await tavilyLimiter.acquire();
 
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (abortSignal?.aborted) controller.abort();
+  abortSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), 8000);
   const safeQuery = query.slice(0, 200).trim(); // Tavily handles up to 400 chars.
 
   let resp: Response;
   try {
-    resp = await fetch("https://api.tavily.com/search", {
+    resp = await multiKeyFetch("https://api.tavily.com/search", {
       method:  "POST",
       headers: {
         "Content-Type":  "application/json",
@@ -1089,13 +1100,15 @@ async function _fetchTavily(
       signal: controller.signal,
     });
   } finally {
+    abortSignal?.removeEventListener("abort", abortFromParent);
     clearTimeout(timeout);
   }
 
   if (!resp.ok) {
-    if (resp.status === 429 && retryCount < 2) {
+    if (resp.status === 429 && retryCount < 2 && !abortSignal?.aborted) {
       await new Promise(r => setTimeout(r, retryCount === 0 ? 3000 : 7000));
-      return _fetchTavily(query, apiKey, deep, retryCount + 1);
+      if (abortSignal?.aborted) throw new Error("Aborted");
+      return _fetchTavily(query, apiKey, deep, retryCount + 1, abortSignal);
     }
     recordEngineFailure("tavily");
     throw new Error(`Tavily HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
@@ -1122,15 +1135,19 @@ async function _fetchTavily(
 
 async function _fetchSerper(
   query: string,
-  apiKey: string
+  apiKey: string,
+  abortSignal?: AbortSignal
 ): Promise<Array<{ title: string; url: string; snippet: string; engine: SearchResult["engine"] }>> {
   if (isCircuitOpen("serper")) return [];
   await serperLimiter.acquire();
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (abortSignal?.aborted) controller.abort();
+  abortSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), 7000);
   let resp: Response;
   try {
-    resp = await fetch("https://google.serper.dev/search", {
+    resp = await multiKeyFetch("https://google.serper.dev/search", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1146,6 +1163,7 @@ async function _fetchSerper(
       signal: controller.signal,
     });
   } finally {
+    abortSignal?.removeEventListener("abort", abortFromParent);
     clearTimeout(timeout);
   }
 
@@ -1170,14 +1188,18 @@ async function _fetchSerper(
 async function _fetchExa(
   query: string,
   apiKey: string,
-  deep = false
+  deep = false,
+  abortSignal?: AbortSignal
 ): Promise<RawSearchResult[]> {
   if (isCircuitOpen("exa")) return [];
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (abortSignal?.aborted) controller.abort();
+  abortSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), 8000);
   let resp: Response;
   try {
-    resp = await fetch("https://api.exa.ai/search", {
+    resp = await multiKeyFetch("https://api.exa.ai/search", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1191,6 +1213,7 @@ async function _fetchExa(
       signal: controller.signal,
     });
   } finally {
+    abortSignal?.removeEventListener("abort", abortFromParent);
     clearTimeout(timeout);
   }
 
@@ -1216,11 +1239,15 @@ async function _fetchExa(
 async function _fetchBrave(
   query: string,
   apiKey: string,
-  _deep = false
+  _deep = false,
+  abortSignal?: AbortSignal
 ): Promise<RawSearchResult[]> {
   if (isCircuitOpen("brave")) return [];
   await braveLimiter.acquire();
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (abortSignal?.aborted) controller.abort();
+  abortSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), 7000);
   const params = new URLSearchParams({
     q:               query.slice(0, 150),
@@ -1234,15 +1261,15 @@ async function _fetchBrave(
   });
   let resp: Response;
   try {
-    resp = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+    resp = await multiKeyFetch(`https://api.search.brave.com/res/v1/web/search?${params.toString()}`, {
       headers: {
         "Accept": "application/json",
-        "Accept-Encoding": "gzip",
         "X-Subscription-Token": apiKey,
       },
       signal: controller.signal,
     });
   } finally {
+    abortSignal?.removeEventListener("abort", abortFromParent);
     clearTimeout(timeout);
   }
 
@@ -1266,16 +1293,21 @@ async function _fetchBrave(
 }
 
 async function _fetchDdgInstant(
-  query: string
+  query: string,
+  abortSignal?: AbortSignal
 ): Promise<Array<{ title: string; url: string; snippet: string; engine: SearchResult["engine"] }>> {
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (abortSignal?.aborted) controller.abort();
+  abortSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), 5000);
 
   let resp: Response;
   try {
     resp = await fetch(url, { signal: controller.signal });
   } finally {
+    abortSignal?.removeEventListener("abort", abortFromParent);
     clearTimeout(timeout);
   }
 

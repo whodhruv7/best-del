@@ -33,6 +33,17 @@ export type ProviderKeyEnv = Partial<Record<
   string | undefined
 >>;
 
+const PLACEHOLDER_VALUE_RE = /^(your|insert|replace|todo|changeme|example|dummy|none|null|undefined)(?:[_-]|$)/i;
+
+function cleanProviderValue(value: string | undefined | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("<") && trimmed.endsWith(">")) return null;
+  if (PLACEHOLDER_VALUE_RE.test(trimmed)) return null;
+  if (trimmed.startsWith("ssk-")) return trimmed.slice(1);
+  return trimmed;
+}
+
 export function extractProviderKeys(req: ProviderKeyRequest, env: ProviderKeyEnv = process.env): RequestKeys {
   const normalizedHeaders = Object.fromEntries(
     Object.entries(req.headers ?? {}).map(([name, value]) => [name.toLowerCase(), value]),
@@ -41,29 +52,39 @@ export function extractProviderKeys(req: ProviderKeyRequest, env: ProviderKeyEnv
     const value = normalizedHeaders[name.toLowerCase()];
     if (!value) return null;
     const first = Array.isArray(value) ? value[0] : value;
-    return first?.trim() || null;
+    return cleanProviderValue(first);
+  };
+
+  const getEnvKey = (baseName: string): string | null => {
+    for (let i = 1; i <= 5; i++) {
+      const val = (env as Record<string, string | undefined>)[`${baseName}_${i}`];
+      const cleaned = cleanProviderValue(val);
+      if (cleaned) return cleaned;
+    }
+
+    return cleanProviderValue((env as Record<string, string | undefined>)[baseName]);
   };
 
   return {
-    groqKey: h("x-groq-api-key") ?? env.GROQ_API_KEY ?? null,
-    ollamaKey: h("x-ollama-api-key") ?? env.OLLAMA_API_KEY ?? null,
-    ollamaBase: h("x-ollama-base-url") ?? env.OLLAMA_BASE_URL ?? null,
-    nvidiaKey: h("x-nvidia-api-key") ?? env.NVIDIA_API_KEY ?? null,
-    geminiKey: h("x-gemini-api-key") ?? env.GEMINI_API_KEY ?? null,
-    openrouterKey: h("x-openrouter-api-key") ?? env.OPENROUTER_API_KEY ?? env.OPENROUTER_KEY ?? null,
-    githubToken: h("x-github-models-api-key") ?? h("x-github-token") ?? env.GITHUB_MODELS_API_KEY ?? env.GITHUB_TOKEN ?? null,
-    tavilyKey: h("x-tavily-api-key") ?? env.TAVILY_API_KEY ?? null,
-    serperKey: h("x-serper-api-key") ?? env.SERPER_API_KEY ?? env.SERPER_KEY ?? null,
-    exaKey: h("x-exa-api-key") ?? env.EXA_API_KEY ?? null,
-    braveKey: h("x-brave-api-key") ?? env.BRAVE_API_KEY ?? env.BRAVE_KEY ?? null,
-    firecrawlKey: h("x-firecrawl-api-key") ?? env.FIRECRAWL_API_KEY ?? null,
-    jinaKey: h("x-jina-api-key") ?? env.JINA_API_KEY ?? env.JINA_KEY ?? null,
-    scraperapiKey: h("x-scraperapi-api-key") ?? h("x-scraper-api-key") ?? env.SCRAPERAPI_KEY ?? null,
-    zenrowsKey: h("x-zenrows-api-key") ?? env.ZENROWS_API_KEY ?? null,
-    scrapingbeeKey: h("x-scrapingbee-api-key") ?? env.SCRAPINGBEE_API_KEY ?? null,
-    geekflareKey: h("x-geekflare-api-key") ?? env.GEEKFLARE_API_KEY ?? null,
-    hfToken: h("x-hf-token") ?? env.HF_TOKEN ?? null,
-    cerebrasKey: h("x-cerebras-api-key") ?? env.CEREBRAS_API_KEY ?? null,
-    openaiKey: h("x-openai-api-key") ?? env.OPENAI_API_KEY ?? null,
+    groqKey: h("x-groq-api-key") ?? getEnvKey("GROQ_API_KEY") ?? null,
+    ollamaKey: h("x-ollama-api-key") ?? getEnvKey("OLLAMA_API_KEY") ?? null,
+    ollamaBase: h("x-ollama-base-url") ?? getEnvKey("OLLAMA_BASE_URL") ?? null,
+    nvidiaKey: h("x-nvidia-api-key") ?? getEnvKey("NVIDIA_API_KEY") ?? null,
+    geminiKey: h("x-gemini-api-key") ?? getEnvKey("GEMINI_API_KEY") ?? null,
+    openrouterKey: h("x-openrouter-api-key") ?? getEnvKey("OPENROUTER_API_KEY") ?? getEnvKey("OPENROUTER_KEY") ?? null,
+    githubToken: h("x-github-models-api-key") ?? h("x-github-token") ?? getEnvKey("GITHUB_MODELS_API_KEY") ?? getEnvKey("GITHUB_TOKEN") ?? null,
+    tavilyKey: h("x-tavily-api-key") ?? getEnvKey("TAVILY_API_KEY") ?? null,
+    serperKey: h("x-serper-api-key") ?? getEnvKey("SERPER_API_KEY") ?? getEnvKey("SERPER_KEY") ?? null,
+    exaKey: h("x-exa-api-key") ?? getEnvKey("EXA_API_KEY") ?? null,
+    braveKey: h("x-brave-api-key") ?? getEnvKey("BRAVE_API_KEY") ?? getEnvKey("BRAVE_KEY") ?? null,
+    firecrawlKey: h("x-firecrawl-api-key") ?? getEnvKey("FIRECRAWL_API_KEY") ?? null,
+    jinaKey: h("x-jina-api-key") ?? getEnvKey("JINA_API_KEY") ?? getEnvKey("JINA_KEY") ?? null,
+    scraperapiKey: h("x-scraperapi-api-key") ?? h("x-scraper-api-key") ?? getEnvKey("SCRAPERAPI_KEY") ?? null,
+    zenrowsKey: h("x-zenrows-api-key") ?? getEnvKey("ZENROWS_API_KEY") ?? null,
+    scrapingbeeKey: h("x-scrapingbee-api-key") ?? getEnvKey("SCRAPINGBEE_API_KEY") ?? null,
+    geekflareKey: h("x-geekflare-api-key") ?? getEnvKey("GEEKFLARE_API_KEY") ?? null,
+    hfToken: h("x-hf-token") ?? getEnvKey("HF_TOKEN") ?? null,
+    cerebrasKey: h("x-cerebras-api-key") ?? getEnvKey("CEREBRAS_API_KEY") ?? null,
+    openaiKey: h("x-openai-api-key") ?? getEnvKey("OPENAI_API_KEY") ?? null,
   };
 }

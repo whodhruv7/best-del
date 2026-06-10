@@ -1946,6 +1946,7 @@ async function handleProviderAllModes(
     githubToken?: string | null;
     hfToken?: string | null;
     getIsDisconnected?: () => boolean;
+    abortSignal?: AbortSignal;
     agendaIntelligence?: AgendaIntelligence;
     runIdentity?: ResearchRunIdentity;
   }
@@ -2153,6 +2154,7 @@ Give sharp, specific arguments. Include counter-arguments to anticipate.
           content: full,
         });
       }
+      finish();
       return;
     }
 
@@ -2889,7 +2891,8 @@ async function executeSequentialBatches(
   geminiKey:     string | null | undefined,
   planned:       PlannedQueries | null,
   send:          (e: object) => void,
-  getIsDisconnected?: () => boolean
+  getIsDisconnected?: () => boolean,
+  abortSignal?: AbortSignal
 ): Promise<BatchResult[]> {
   const topic = classifyTopic(userQuery);
   const assignedBatches: Array<{ batchName: string; role: ResearchRole; models: typeof modelInfos }> = [];
@@ -3013,7 +3016,7 @@ async function executeSequentialBatches(
             queryBatch.map(async (q) => {
               send({ model: info.rawModelId, searching: q });
               try {
-                const searchKeys = { tavilyKey, serperKey, exaKey, braveKey };
+                const searchKeys = { tavilyKey, serperKey, exaKey, braveKey, abortSignal };
                 return isDeep ? await searchWebDeep(q, searchKeys, topic) : await searchWeb(q, searchKeys, topic);
               } catch { return [] as SearchResult[]; }
             })
@@ -3812,6 +3815,7 @@ async function handleMultiSearch(
     getIsDisconnected?: () => boolean;
     agendaIntelligence?: AgendaIntelligence;
     runIdentity?: ResearchRunIdentity;
+    abortSignal?: AbortSignal;
   }
 ) {
   const {
@@ -4049,7 +4053,8 @@ async function handleMultiSearch(
     geminiKey,
     planned,
     send,
-    opts.getIsDisconnected
+    opts.getIsDisconnected,
+    opts.abortSignal
   );
 
   if (opts.getIsDisconnected?.()) return;
@@ -4084,7 +4089,7 @@ async function handleMultiSearch(
       `${userQuery} India Supreme Court judgment indiankanoon.org`,
     ];
     const emergencyResults = await Promise.allSettled(
-      emergencyQueries.map((query) => searchWebDeep(query, { tavilyKey, serperKey, exaKey, braveKey }, topic))
+      emergencyQueries.map((query) => searchWebDeep(query, { tavilyKey, serperKey, exaKey, braveKey, abortSignal: opts.abortSignal }, topic))
     );
     const mergedEmergency = mergeSearchResults(emergencyResults
       .filter((result): result is PromiseFulfilledResult<SearchResult[]> => result.status === "fulfilled")
@@ -4169,6 +4174,7 @@ async function handleMultiSearch(
             corePipelineData: event.data ?? {},
           });
         },
+        signal: opts.abortSignal,
       });
       corePipelineResult = coreResult;
       send({
@@ -4706,6 +4712,13 @@ async function handleMultiSearch(
 }
 
 router.post("/anthropic/conversations/:id/messages", async (req, res) => {
+  // Guard: max message content 32KB
+  const rawContent = req.body?.content;
+  if (typeof rawContent === "string" && rawContent.length > 32_768) {
+    res.status(400).json({ error: "Message content exceeds 32KB limit.", code: "content_too_large" });
+    return;
+  }
+
   const paramsParsed = SendAnthropicMessageParams.safeParse({ id: Number(req.params.id) });
   const bodyParsed = SendAnthropicMessageBody.safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) { res.status(400).json({ error: "Invalid request" }); return; }
@@ -5430,6 +5443,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
         openrouterKey: keys.openrouterKey,
         hfToken: keys.hfToken,
         getIsDisconnected: () => clientDisconnected,
+        abortSignal: requestAbortController.signal,
         agendaIntelligence,
         runIdentity,
       });
@@ -5463,6 +5477,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
       githubToken: keys.githubToken,
       hfToken: keys.hfToken,
       getIsDisconnected: () => clientDisconnected,
+      abortSignal: requestAbortController.signal,
       runIdentity,
     });
     return;

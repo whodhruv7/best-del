@@ -35,6 +35,15 @@ const DEFAULT_SELECTED_MODEL = "groq/llama-3.3-70b-versatile";
 const PROVIDER_REFRESH_TIMEOUT_MS = 12_000;
 const PROVIDER_MODELS_UPDATED_EVENT = "bestdel:provider-models-updated";
 
+function normalizeStoredSelectedModel(model: string | null | undefined): string {
+  const trimmed = model?.trim();
+  if (!trimmed) return DEFAULT_SELECTED_MODEL;
+  if (/^nvidia\/nvidia\//i.test(trimmed)) return trimmed;
+  if (/^nvidia\/(?:llama-|nemotron-)/i.test(trimmed)) return `nvidia/${trimmed}`;
+  if (/^(?:llama-.*nemotron|nemotron-)/i.test(trimmed)) return `nvidia/nvidia/${trimmed}`;
+  return trimmed;
+}
+
 function emptyModels(): ProviderModels {
   return { groq: [], openrouter: [], nvidia: [], github: [], gemini: [], ollama: [], cerebras: [] };
 }
@@ -139,7 +148,7 @@ export function ProviderRuntimeProvider({ children }: { children: ReactNode }) {
   const [providerModels, setProviderModels] = useState<ProviderModels>(() => emptyModels());
   const [selectedModel, setSelectedModelState] = useState<string>(() => {
     try {
-      return localStorage.getItem("lastNormalModel") || DEFAULT_SELECTED_MODEL;
+      return normalizeStoredSelectedModel(localStorage.getItem("lastNormalModel"));
     } catch {
       return DEFAULT_SELECTED_MODEL;
     }
@@ -148,9 +157,17 @@ export function ProviderRuntimeProvider({ children }: { children: ReactNode }) {
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
 
   const setSelectedModel = useCallback((model: string) => {
-    setSelectedModelState(model);
-    try { localStorage.setItem("lastNormalModel", model); } catch {}
+    setSelectedModelState(normalizeStoredSelectedModel(model));
   }, []);
+
+  useEffect(() => {
+    const normalized = normalizeStoredSelectedModel(selectedModel);
+    if (normalized !== selectedModel) {
+      setSelectedModelState(normalized);
+      return;
+    }
+    try { localStorage.setItem("lastNormalModel", normalized); } catch {}
+  }, [selectedModel]);
 
   // Track whether a refresh is currently in-flight
   const inFlightRef = useRef<Promise<void> | null>(null);

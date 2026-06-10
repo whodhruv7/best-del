@@ -55,6 +55,12 @@ export function normalizeProviderModel(provider: ModelProviderName, rawModel: un
 export function normalizeProviderNativeModelId(provider: ModelProviderName, id: string): string {
   const trimmed = id.trim();
   const providerPrefix = `${provider}/`;
+  if (provider === "nvidia") {
+    // NVIDIA native model ids can themselves start with "nvidia/".
+    // Only remove the outer app-level provider prefix from already-prefixed
+    // ids like "nvidia/nvidia/llama-..."; keep native ids intact.
+    return trimmed.startsWith("nvidia/nvidia/") ? trimmed.slice(providerPrefix.length) : trimmed;
+  }
   if (trimmed.startsWith(providerPrefix)) {
     return trimmed.slice(providerPrefix.length);
   }
@@ -83,4 +89,3 @@ export function buildSelectableResearchModels(providerStatus: ProviderStatusMap,
 function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === "object";
 }
-

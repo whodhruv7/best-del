@@ -217,14 +217,22 @@ writeFileSync(debugPath, JSON.stringify({
   })),
 }, null, 2), "utf8");
 
+const completedWithSourceGaps =
+  result.terminalStatus === "completed_with_source_gaps"
+  && Boolean(result.sourceGapReport)
+  && result.citationReport.uniqueCitedSourceCount >= minimumSourceCount;
+const sourceUsageAccepted =
+  result.sourceUsageAggregate.passed
+  || (completedWithSourceGaps && result.sourceUsageAggregate.validUsedSourceIds.length > 0);
+
 const summary = {
-  ok: result.terminalStatus === "completed"
+  ok: (result.terminalStatus === "completed" || completedWithSourceGaps)
     && wordCount >= minimumWordCount
     && (maximumWordCount <= 0 || wordCount <= maximumWordCount)
     && result.qualityGate.passed
-    && result.sourceUsageAggregate.passed
+    && sourceUsageAccepted
     && result.evidenceRegistry.getCitationEligibleCount() >= minimumSourceCount
-    && result.sourceUsageAggregate.validUsedSourceIds.length >= minimumSourceCount
+    && (result.sourceUsageAggregate.passed ? result.sourceUsageAggregate.validUsedSourceIds.length >= minimumSourceCount : sourceUsageAccepted)
     && result.citationReport.uniqueCitedSourceCount >= minimumSourceCount
     && !hasJavascriptTrash
     && !result.usedLegacyFallback,

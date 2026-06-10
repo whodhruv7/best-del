@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { multiKeyFetch } from "./multi-key-fetch.js";
 
 export const GITHUB_MODELS_BASE_URL = process.env.GITHUB_MODELS_BASE_URL ?? "https://models.github.ai/inference";
 
@@ -14,6 +15,7 @@ export function getGithubModelsClient(overrideToken?: string | null): OpenAI {
   return new OpenAI({
     baseURL: GITHUB_MODELS_BASE_URL,
     apiKey: token,
+    fetch: multiKeyFetch as any,
     defaultHeaders: {
       "X-GitHub-Models-Api-Key": token,
       "X-GitHub-Token": token,

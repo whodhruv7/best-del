@@ -1,4 +1,8 @@
+import "dotenv/config";
+import { normalizeApiKeys } from "../src/lib/normalize-keys.js";
 import { buildSearchProviderStatus } from "../src/core/search/search-provider-status.js";
+
+normalizeApiKeys();
 
 const keys = {
   serper: process.env.SERPER_API_KEY,

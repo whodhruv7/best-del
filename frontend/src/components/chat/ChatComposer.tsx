@@ -102,15 +102,15 @@ export function ChatComposer({
       {/* Floating rounded panel */}
       <div
         className={cn(
-          "rounded-[24px] border border-amber-500/30 bg-background/90 backdrop-blur-2xl",
-          "shadow-[0_10px_28px_-10px_rgba(15,23,42,0.22),0_0_0_1px_rgba(212,160,59,0.10),0_0_24px_-6px_rgba(212,160,59,0.18)]",
+          "rounded-[20px] border border-amber-500/25 bg-background/[0.92] backdrop-blur-2xl sm:rounded-[24px]",
+          "shadow-[0_10px_24px_-12px_rgba(15,23,42,0.2),0_0_0_1px_rgba(212,160,59,0.08)] sm:shadow-[0_10px_28px_-10px_rgba(15,23,42,0.22),0_0_0_1px_rgba(212,160,59,0.10),0_0_24px_-6px_rgba(212,160,59,0.18)]",
           "ring-1 ring-inset ring-black/[0.04] dark:bg-zinc-950/80 dark:shadow-[0_10px_28px_-10px_rgba(0,0,0,0.55),0_0_0_1px_rgba(212,160,59,0.10),0_0_24px_-6px_rgba(212,160,59,0.22)] dark:ring-white/[0.04]",
           "transition-shadow",
         )}
         data-testid="chat-composer-panel"
       >
         {/* Top row: mode chips + options toggle */}
-        <div className="flex items-center gap-1.5 px-2.5 pt-1.5 pb-0.5">
+        <div className="flex min-w-0 items-center gap-1.5 px-2 pt-2 pb-0.5 sm:px-2.5 sm:pt-1.5">
           <ChatModeChips activeId={activeChip} onSelect={onSelectChip} />
           {showOptionsToggle && (
             <Tooltip>
@@ -120,7 +120,7 @@ export function ChatComposer({
                   onClick={onShowOptionsToggle}
                   aria-label={showOptions ? "Hide model options" : "Show model options"}
                   className={cn(
-                    "ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
+                    "ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors sm:h-7 sm:w-7",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/60",
                     showOptions
                       ? "border-amber-400/60 bg-amber-400/10 text-amber-200"
@@ -138,7 +138,7 @@ export function ChatComposer({
 
         {/* Optional status / model summary row */}
         {(statusBadge || modelSummary) && (
-          <div className="flex items-center gap-2 px-3 pb-1 text-[10px] text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2 px-3 pb-1 text-[10px] text-muted-foreground">
             {statusBadge && (
               <span
                 className={cn(
@@ -151,12 +151,12 @@ export function ChatComposer({
                 {statusBadge.label}
               </span>
             )}
-            {modelSummary && <span className="truncate">{modelSummary}</span>}
+            {modelSummary && <span className="min-w-0 truncate">{modelSummary}</span>}
           </div>
         )}
 
         {/* Middle: textarea */}
-        <div className="px-1.5">
+        <div className="px-1 sm:px-1.5">
           <div className="relative">
             <ChatInputBox
               ref={inputRef}
@@ -170,12 +170,12 @@ export function ChatComposer({
         </div>
 
         {/* Bottom: keyboard hint + actions */}
-        <div className="flex items-center justify-between gap-2 px-2.5 pt-0.5 pb-1.5">
+        <div className="flex min-w-0 items-center justify-between gap-2 px-2 pt-0.5 pb-2 sm:px-2.5 sm:pb-1.5">
           <span className="hidden min-w-0 items-center gap-1.5 truncate text-[10px] text-muted-foreground sm:inline-flex">
             <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-foreground/70">Enter</kbd>
             to send
           </span>
-          <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground sm:hidden">
+          <span className="hidden items-center gap-1.5 text-[10px] text-muted-foreground min-[420px]:inline-flex sm:hidden">
             <Wand2 className="h-3 w-3" />
             Tap to enhance
           </span>

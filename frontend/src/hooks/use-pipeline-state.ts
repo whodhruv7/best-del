@@ -539,6 +539,8 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
         activeConversationId: action.conversationId ?? null,
         streamingContent: "",
         runStatus: "running",
+        // Reset core pipeline events on new run to prevent stale events from showing
+        corePipelineEvents: [],
       };
     }
 

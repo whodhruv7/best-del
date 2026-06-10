@@ -28,6 +28,13 @@ const envSchema = z.object({
   RETRIEVAL_CACHE_MAX_ENTRY_BYTES: z.coerce.number().default(5 * 1_048_576),
   RETRIEVAL_CACHE_SCHEMA_VERSION: z.coerce.number().default(1),
   RETRIEVAL_CACHE_DEBUG: envBoolean(false),
+  // Rate limiting configuration
+  ALLOWED_ORIGINS: z.string().optional(),
+  RATE_LIMIT_GENERAL_MAX: z.coerce.number().default(120),
+  RATE_LIMIT_RESEARCH_MAX: z.coerce.number().default(30),
+  RATE_LIMIT_RESEARCH_WINDOW_MS: z.coerce.number().default(3_600_000),
+  RATE_LIMIT_COUNCIL_MAX: z.coerce.number().default(1),
+  RATE_LIMIT_COUNCIL_WINDOW_MS: z.coerce.number().default(86_400_000),
 });
 
 export const config = envSchema.parse(process.env);

@@ -12,9 +12,9 @@ import {
 import {
   Bot, User,
   Wand2, ChevronRight, ArrowDown,
-  Copy, RefreshCw, Globe, FlaskConical, Zap, MessageSquare, ChevronDown,
+  Copy, RefreshCw, Globe, FlaskConical, Zap, MessageSquare,
   PenLine, Mic2, Layers, Landmark, Bookmark, Users,
-  ShieldCheck,
+  ShieldCheck, Search, X, Check,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,23 +49,9 @@ import {
 // IGNORED_STALE_EVENT
 // terminalSuccessReceived receivedDone !response.ok completed_with_source_gaps legacy_fallback_used
 import {
-  stripPrefix,
   simplifyModelName,
-  getModelDescription,
   getModelIcon,
-  type ProviderModel,
 } from "./provider-model-display";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuCheckboxItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 
 interface ChatAreaProps {
   conversationId: number | null;
@@ -114,7 +100,10 @@ export function ChatArea({
   const [tokensPerSec, setTokensPerSec] = useState<number | null>(null);
   const composerFocusRef = useRef<(() => void) | null>(null);
   const [showOptions, setShowOptions] = useState(false);
+  const [showLiveResearchRun, setShowLiveResearchRun] = useState(false);
   useEffect(() => { if (isStreaming) setShowOptions(false); }, [isStreaming]);
+  const [modelSearch, setModelSearch] = useState("");
+  const [modelSelectionDirty, setModelSelectionDirty] = useState(false);
   const [chatType, setChatType] = useState<ChatType>("research");
   const [rhetoricsType, setRhetoricsType] = useState<RhetoricsType>("speech");
   const [creativity, setCreativity] = useState<number>(0.5);
@@ -131,6 +120,18 @@ export function ChatArea({
   useEffect(() => {
     try { localStorage.setItem("lastChatMode", currentMode); } catch {}
   }, [currentMode]);
+
+  useEffect(() => {
+    if (chatType === "rhetorics" && !isStreaming) {
+      setShowOptions(true);
+    }
+  }, [chatType, isStreaming]);
+
+  useEffect(() => {
+    setModelSearch("");
+    setModelSelectionDirty(false);
+  }, [chatType, currentMode]);
+
   const {
     providerStatus,
     providerModels,
@@ -191,10 +192,7 @@ export function ChatArea({
       nextModels = [...models, modelId];
     }
     setModels(nextModels);
-    if (nextModels.length === 1) {
-      setShowOptions(false);
-      setTimeout(() => composerFocusRef.current?.(), 50);
-    }
+    setModelSelectionDirty(true);
   };
 
   // Enhance prompt state
@@ -264,6 +262,7 @@ export function ChatArea({
     handleStop();
     setIsStreaming(false);
     resetPipeline();
+    setShowLiveResearchRun(false);
     setInput("");
     return () => abortStreamsForConversation(conversationId);
   }, [abortStreamsForConversation, conversationId, handleStop, resetPipeline]);
@@ -298,6 +297,7 @@ export function ChatArea({
 
   const resetPipelineState = () => {
     resetPipeline();
+    setShowLiveResearchRun(false);
     setEnhancedFrom(null);
   };
 
@@ -433,13 +433,20 @@ export function ChatArea({
         rhetoricsType,
         creativity,
       };
-      await runStream(
+      const streamCompleted = await runStream(
         currentConvId!, messageContent, normalModel, currentMode,
         chatType === "rhetorics" ? { rhetoricsType, creativity } : undefined
       );
+      if (streamCompleted) {
+        dispatchPipeline({ type: "RUN_STATUS", status: "completed" });
+        dispatchPipeline({ type: "COMPLETE" });
+      } else {
+        dispatchPipeline({ type: "RUN_STATUS", status: "failed" });
+      }
     } catch (error) {
       if ((error as any)?.name !== "AbortError") {
         console.error("Failed to send message:", error);
+        dispatchPipeline({ type: "RUN_STATUS", status: "failed" });
       } else {
         dispatchPipeline({ type: "RUN_STATUS", status: "cancelled" });
       }
@@ -644,7 +651,7 @@ export function ChatArea({
 
   const deskModes = [
     { id: "drafting", label: "Drafting", icon: PenLine, color: "#22c55e", description: "Draft speeches, clauses, and working papers using archive context.", select: () => { setChatType("research"); setCurrentMode("normal"); setShowOptions(false); } },
-    { id: "rhetorics", label: "Rhetorics", icon: Mic2, color: "#8b5cf6", description: "Build speeches, POIs, rebuttals, and floor interventions.", select: () => { setChatType("rhetorics"); setShowOptions(false); } },
+    { id: "rhetorics", label: "Rhetorics", icon: Mic2, color: "#8b5cf6", description: "Build speeches, POIs, rebuttals, and floor interventions.", select: () => { setChatType("rhetorics"); setShowOptions(true); } },
     { id: "fast", label: "Fast Research", icon: Globe, color: "#3b6fd4", description: "Quick web lookups and fact-checking during committee sessions.", select: () => { setChatType("research"); setCurrentMode("fast_research"); setShowOptions(false); } },
     { id: "deep", label: "Deep Research", icon: FlaskConical, color: "#3b6fd4", description: "Comprehensive source-backed synthesis for serious prep.", select: () => { setChatType("research"); setCurrentMode("deep_research"); setShowOptions(false); } },
     { id: "council", label: "Council", icon: Users, color: "#d4a03b", description: "Six councillors stress-test the agenda and prepare floor strategy.", select: () => { setChatType("research"); setCurrentMode("council"); setShowOptions(false); } },
@@ -657,13 +664,34 @@ export function ChatArea({
     currentMode === "fast_research" ? "fast" :
     "drafting";
 
-  const activeProviderModel = getPrimaryModelForMode(currentMode);
   const activeModeModels = getModelsForMode(currentMode);
   const activeModeModelSetter = currentMode === "fast_research" ? setWebSearchModels : setDeepResearchModels;
   const activeModeColor = chatType === "rhetorics" ? "#8b5cf6" : MODE_META[currentMode].hex;
+  const filteredModelGroups = useMemo(() => {
+    const query = modelSearch.trim().toLowerCase();
+    return modelGroups
+      .map(({ provider, models }) => ({
+        provider,
+        models: models.filter((model) => {
+          if (!query) return true;
+          const id = `${provider.toLowerCase()}/${model.id}`;
+          const label = model.name || simplifyModelName(model.id);
+          return `${provider} ${id} ${label}`.toLowerCase().includes(query);
+        }),
+      }))
+      .filter(({ models }) => models.length > 0);
+  }, [modelGroups, modelSearch]);
+  const selectedModelCount = currentMode === "normal" ? 1 : activeModeModels.length;
+  const saveModelSelection = () => {
+    setModelSelectionDirty(false);
+    setShowOptions(false);
+    setModelSearch("");
+    focusInput();
+  };
   const isWelcome = !conversationId && !isStreaming && !conversation;
-  // Fix (Bug L653): keep sidebar mounted after streaming ends so sources remain visible
-  const showResearchRail = (isStreaming || pipeline.isComplete) && chatType === "research" && currentMode !== "normal";
+  const effectiveMode = (isStreaming || pipeline.isComplete) && pipeline.selectedResearchMode ? pipeline.selectedResearchMode : currentMode;
+  const researchRunAvailable = (isStreaming || pipeline.isComplete) && chatType === "research" && effectiveMode !== "normal";
+  const showResearchRail = researchRunAvailable && showLiveResearchRun;
   const researchSidebarSummary = useMemo(() => summarizeResearchRunSidebar({
     activeArchiveName,
     activeArchiveTopic,
@@ -672,6 +700,7 @@ export function ChatArea({
     selectedResearchMode: pipeline.selectedResearchMode,
     corePipelineEvents: pipeline.corePipelineEvents,
     fullSourceManifest: pipeline.fullSourceManifest,
+    customModelFound: pipeline.customModelFound,
     citationStatus: pipeline.citationStatus,
     sourceContract: pipeline.sourceContract,
     sourceGapReport: pipeline.sourceGapReport,
@@ -681,22 +710,24 @@ export function ChatArea({
     activeArchiveTopic,
     pipeline.citationStatus,
     pipeline.corePipelineEvents,
+    pipeline.customModelFound,
     pipeline.fullSourceManifest,
     pipeline.runStatus,
     pipeline.selectedResearchMode,
     pipeline.sourceContract,
     pipeline.sourceGapReport,
   ]);
+  const latestResearchSignal = researchSidebarSummary.latestEvents.at(-1) ?? researchSidebarSummary.statusLabel;
 
   return (
-    <div className="relative flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-background">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {showResearchRail && (
-        <ResearchRunSidebar summary={researchSidebarSummary} />
+        <ResearchRunSidebar summary={researchSidebarSummary} onClose={() => setShowLiveResearchRun(false)} />
       )}
       {isWelcome ? (
-        <div key="welcome" className="animate-page-fade flex-1 overflow-y-auto" data-cursor-glint-scope="welcome">
+        <div key="welcome" className="animate-page-fade flex-1 overflow-y-auto overscroll-contain" data-cursor-glint-scope="welcome">
           <CursorGlint />
-          <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-start gap-4 px-5 pb-10 pt-5 md:px-8 lg:pt-6">
+          <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-start gap-3 px-4 pb-8 pt-4 sm:gap-4 sm:px-5 md:px-8 lg:pt-6">
             <div className="relative">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -704,7 +735,7 @@ export function ChatArea({
                 transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
                 className="bestdel-hero-glow welcome-greeting relative mx-auto max-w-3xl text-center"
               >
-                <Landmark className="pointer-events-none absolute left-1/2 top-[-34px] h-28 w-28 -translate-x-1/2 text-[#3b6fd4]/10 md:h-36 md:w-36" />
+                <Landmark className="pointer-events-none absolute left-1/2 top-[-20px] h-24 w-24 -translate-x-1/2 text-[#3b6fd4]/10 sm:top-[-34px] md:h-36 md:w-36" />
                 <motion.div
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -720,7 +751,7 @@ export function ChatArea({
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15, duration: 0.5 }}
-                  className="mx-auto max-w-3xl text-3xl leading-[0.95] text-foreground md:text-4xl lg:text-[2.85rem]"
+                  className="mx-auto max-w-3xl text-[2rem] leading-[1.02] text-foreground sm:text-4xl md:text-[2.65rem] lg:text-[2.85rem]"
                   style={{ fontFamily: "Instrument Serif, serif", fontWeight: 400 }}
                 >
                   Honorable Delegate,
@@ -732,7 +763,7 @@ export function ChatArea({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.25 }}
-                  className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground md:text-[14px]"
+                  className="mx-auto mt-3 max-w-2xl text-[13px] leading-6 text-muted-foreground sm:text-sm md:text-[14px]"
                 >
                   Your intelligence desk for Indian parliamentary committees. Research complex agendas, draft speeches, and formulate rebuttals backed by validated citations and deep source memory.
                 </motion.p>
@@ -740,7 +771,7 @@ export function ChatArea({
                   {["Citations validated", "Source usage mapped", "Archive memory", "Indian committee framing"].map((badge) => (
                     <span
                       key={badge}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-[#d4a03b30] bg-[#d4a03b12] px-2.5 py-1 text-[11px] font-semibold text-[#f3c76f]"
+                       className="inline-flex items-center gap-1.5 rounded-full border border-[#d4a03b30] bg-[#d4a03b12] px-2.5 py-1 text-[11px] font-semibold text-[#8a5b13] dark:text-[#f3c76f]"
                     >
                       <ShieldCheck className="h-3 w-3" />
                       {badge}
@@ -763,14 +794,14 @@ export function ChatArea({
                 {activeArchiveTopic && (
                   <div className="mx-auto mt-4 flex max-w-2xl items-start gap-2 rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-left">
                     <Bookmark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#d4a03b]" />
-                    <p className="min-w-0 text-sm leading-6 text-muted-foreground">
+                    <p className="min-w-0 text-[13px] leading-6 text-muted-foreground sm:text-sm">
                       <span className="font-semibold text-[#d4a03b]">Active Archive Brief:</span>{" "}
                       <span className="line-clamp-2">{activeArchiveTopic}</span>
                     </p>
                   </div>
                 )}
                 {activeArchiveAngles && activeArchiveAngles.length > 0 && (
-                  <div className="mx-auto mt-4 max-w-2xl rounded-lg border border-border/70 border-t-[#3b6fd480] bg-card p-3 text-left text-xs text-muted-foreground">
+                  <div className="mx-auto mt-4 max-w-2xl rounded-xl border border-border/70 border-t-[#3b6fd480] bg-card p-3 text-left text-xs text-muted-foreground">
                     <p className="mb-2 font-semibold uppercase tracking-widest text-muted-foreground">Research Angles</p>
                     <ul className="space-y-1">
                       {activeArchiveAngles.slice(0, 5).map((angle, i) => (
@@ -782,7 +813,7 @@ export function ChatArea({
               </motion.div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mx-auto grid w-full max-w-5xl gap-2.5 min-[460px]:grid-cols-2 lg:grid-cols-4">
               {featureCards.map((card, i) => {
                 const Icon = card.icon;
                 return (
@@ -791,7 +822,7 @@ export function ChatArea({
                     onClick={card.onClick}
                     style={{ "--card-accent": card.accent } as CSSProperties}
                     className={cn(
-                      "feature-card group flex min-h-[96px] w-full flex-col items-start justify-between gap-2 p-3 text-left",
+                       "feature-card group flex min-h-[88px] w-full flex-col items-start justify-between gap-2 p-3 text-left sm:min-h-[96px]",
                       i === 0 && "welcome-card-1",
                       i === 1 && "welcome-card-2",
                       i === 2 && "welcome-card-3",
@@ -805,13 +836,13 @@ export function ChatArea({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div
-                        className="text-[15px] font-semibold leading-snug"
+                        className="text-sm font-semibold leading-snug sm:text-[15px]"
                         style={{ color: "var(--text-primary-hex)" }}
                       >
                         {card.title}
                       </div>
                       <div
-                        className="mt-1 border-t border-border/55 pt-3 text-[13px] leading-6"
+                        className="mt-1 border-t border-border/55 pt-2.5 text-xs leading-5 sm:pt-3 sm:text-[13px] sm:leading-6"
                         style={{ color: "var(--text-secondary-hex)" }}
                       >
                         {card.desc}
@@ -825,7 +856,7 @@ export function ChatArea({
                 );
               })}
             </div>
-            <div className="mx-auto grid w-full max-w-4xl gap-2 rounded-2xl border border-border/70 bg-card/80 p-2 text-left sm:grid-cols-4">
+            <div className="mx-auto grid w-full max-w-4xl gap-2 rounded-2xl border border-border/70 bg-card/80 p-2 text-left min-[520px]:grid-cols-2 lg:grid-cols-4">
               {[
                 ["Plan", "Topic-aware queries"],
                 ["Retrieve", "Official and legal sources"],
@@ -844,7 +875,7 @@ export function ChatArea({
         <div
           key={conversationId ?? "new"}
           className={cn(
-            "animate-page-fade relative flex-1 overflow-y-auto space-y-2.5 px-3 py-2.5 md:px-4 md:py-3",
+             "animate-page-fade relative flex-1 overflow-y-auto overscroll-contain space-y-2.5 px-2 py-2.5 sm:px-3 md:px-4 md:py-3",
             showResearchRail && "lg:mr-[344px]"
           )}
           ref={scrollRef}
@@ -853,7 +884,7 @@ export function ChatArea({
           <button
             onClick={scrollToBottom}
             className={cn(
-              "scroll-bottom-btn fixed md:absolute bottom-28 md:bottom-32 right-4 md:right-8 z-20 flex items-center justify-center w-10 h-10 rounded-full bg-background border border-border shadow-md text-foreground hover:bg-muted",
+              "scroll-bottom-btn fixed bottom-32 right-3 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-muted md:absolute md:bottom-32 md:right-8",
               showScrollBtn && "is-visible"
             )}
             title="Scroll to bottom"
@@ -863,6 +894,29 @@ export function ChatArea({
           >
             <ArrowDown className="w-4 h-4" />
           </button>
+          {researchRunAvailable && (
+            <div className="sticky top-2 z-20 mx-auto flex w-full max-w-5xl justify-end px-1.5 sm:px-3 md:px-4">
+              <button
+                type="button"
+                onClick={() => setShowLiveResearchRun((open) => !open)}
+                className={cn(
+                  "inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-background/95 px-3 py-2 text-[11px] font-semibold text-foreground shadow-sm backdrop-blur-xl transition-colors hover:bg-muted sm:text-xs",
+                  showLiveResearchRun && "border-[#3b6fd4]/35 bg-[#3b6fd4]/10"
+                )}
+                aria-expanded={showLiveResearchRun}
+                data-testid="button-toggle-live-research"
+              >
+                <FlaskConical className={cn("h-3.5 w-3.5", pipeline.runStatus === "running" && "animate-pulse")} />
+                <span>{showLiveResearchRun ? "Hide live research" : "See live research"}</span>
+                <span className="hidden max-w-[160px] truncate rounded-full border border-border/50 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
+                  {latestResearchSignal}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {researchSidebarSummary.totalSources > 0 ? `${researchSidebarSummary.totalSources} src` : "live"}
+                </span>
+              </button>
+            </div>
+          )}
           {isLoading && !conversation ? (
             <div className="space-y-4 animate-pulse" data-testid="conversation-loading-skeleton">
               <div className="h-4 bg-muted rounded w-3/4" />
@@ -914,7 +968,7 @@ export function ChatArea({
                 <div
                   key={msg.id}
                     className={cn(
-                      "group/msg mx-auto flex max-w-5xl gap-2 px-3 bubble-spring md:gap-3 md:px-4",
+                       "group/msg mx-auto flex w-full max-w-5xl gap-2 px-1.5 bubble-spring sm:px-3 md:gap-3 md:px-4",
                     msg.role === "user" ? "flex-row-reverse" : "flex-row",
                     grouped ? "mt-1" : "mt-3"
                   )}
@@ -922,7 +976,7 @@ export function ChatArea({
                 >
                   <div
                     className={cn(
-                      "w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 transition-transform",
+                       "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-transform md:h-8 md:w-8",
                       msg.role === "user" ? "bg-[#3b6fd4] text-white" : "rounded-lg bg-[#3b6fd4] text-white",
                       grouped && "invisible"
                     )}
@@ -931,11 +985,11 @@ export function ChatArea({
                     {msg.role === "user" ? <User className="w-4 h-4 md:w-5 md:h-5" /> : <Bot className="w-4 h-4 md:w-5 md:h-5" />}
                   </div>
                     <div className={cn(
-                      "flex min-w-0 max-w-[85ch] flex-col gap-1",
+                       "flex min-w-0 max-w-[calc(100%-2.5rem)] flex-col gap-1 sm:max-w-[85ch]",
                     msg.role === "user" ? "items-end" : "items-start"
                   )}>
                     <div className={cn(
-                      "relative max-w-[85ch] px-4 py-3 text-sm leading-7 shadow-sm backdrop-blur-xl md:px-5 md:py-3.5 md:text-[15px]",
+                       "relative max-w-full break-words px-3.5 py-2.5 text-sm leading-7 shadow-sm backdrop-blur-xl sm:px-4 md:px-5 md:py-3.5 md:text-[15px]",
                       msg.role === "user"
                         ? "rounded-2xl rounded-br-sm border border-[#3b6fd420] bg-card text-foreground" /* Fix Bug L927: use CSS var not hardcoded dark */
                         : "assistant-bubble rounded-2xl rounded-tl-sm text-foreground"
@@ -998,16 +1052,16 @@ export function ChatArea({
             return items;
           })()}
 
-          {isStreaming && chatType === "research" && currentMode === "council" && (
-            <div className="mx-auto max-w-5xl px-3 pl-9 md:px-4 md:pl-12 animate-bubble-in">
+          {researchRunAvailable && showLiveResearchRun && isStreaming && effectiveMode === "council" && (
+            <div className="mx-auto w-full max-w-5xl px-1.5 animate-bubble-in sm:px-3 sm:pl-10 md:px-4 md:pl-12">
               <CouncilChamberPanel session={pipeline.councilSession} />
             </div>
           )}
 
-          {isStreaming && chatType === "research" && currentMode !== "normal" && currentMode !== "council" && (
-            <div className="mx-auto max-w-5xl px-3 pl-9 md:px-4 md:pl-12 animate-bubble-in">
+          {researchRunAvailable && showLiveResearchRun && isStreaming && effectiveMode !== "council" && (
+            <div className="mx-auto w-full max-w-5xl px-1.5 animate-bubble-in sm:px-3 sm:pl-10 md:px-4 md:pl-12">
               <ResearchPipeline
-                mode={currentMode as Exclude<ChatMode, "council">}
+                mode={effectiveMode as Exclude<ChatMode, "council">}
                 modelConfig="standard"
                 isPlanning={pipeline.isPlanning}
                 plannerModel={pipeline.plannerModel}
@@ -1072,12 +1126,12 @@ export function ChatArea({
           )}
 
           {isStreaming && chatType === "research" && currentMode === "normal" && (
-            <div className="mx-auto flex max-w-5xl flex-row gap-2 px-3 animate-bubble-in md:gap-3 md:px-4" data-testid="message-streaming">
+            <div className="mx-auto flex w-full max-w-5xl flex-row gap-2 px-1.5 animate-bubble-in sm:px-3 md:gap-3 md:px-4" data-testid="message-streaming">
               <div className="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 bg-muted text-muted-foreground mt-1 animate-pulse-soft">
                 <Bot className="w-4 h-4 md:w-5 md:h-5" />
               </div>
-              <div className="flex w-full max-w-[85ch] flex-col gap-2">
-                <div className="assistant-bubble w-full rounded-[22px] px-5 py-4 text-foreground transition-all duration-200">
+              <div className="flex w-full max-w-[calc(100%-2.5rem)] flex-col gap-2 sm:max-w-[85ch]">
+                <div className="assistant-bubble w-full rounded-[20px] px-3.5 py-3 text-foreground transition-all duration-200 sm:px-5 sm:py-4">
                   <div className="prose prose-sm max-w-none text-foreground dark:prose-invert">
                     {(() => {
                       if (!streamingContent) {
@@ -1104,7 +1158,7 @@ export function ChatArea({
           )}
 
           {isStreaming && chatType === "rhetorics" && (
-            <div className="mx-auto flex max-w-5xl flex-row gap-2 px-3 animate-bubble-in md:gap-3 md:px-4">
+            <div className="mx-auto flex w-full max-w-5xl flex-row gap-2 px-1.5 animate-bubble-in sm:px-3 md:gap-3 md:px-4">
               <div className={cn(
                 "w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 mt-1 text-base",
                 rhetoricsType === "debate" ? "bg-rose-100 dark:bg-rose-950/40"
@@ -1113,7 +1167,7 @@ export function ChatArea({
               )}>
                 <Bot className="h-4 w-4 text-slate-500 dark:text-slate-300" />
               </div>
-              <div className="flex w-full max-w-[85ch] flex-col gap-1.5">
+              <div className="flex w-full max-w-[calc(100%-2.5rem)] flex-col gap-1.5 sm:max-w-[85ch]">
                 <p className={cn("text-[10px] font-semibold",
                   rhetoricsType === "debate" ? "text-rose-500 dark:text-rose-400"
                     : rhetoricsType === "kavita" ? "text-amber-600 dark:text-amber-400"
@@ -1122,7 +1176,7 @@ export function ChatArea({
                   {rhetoricsType === "debate" ? "Opposing Delegate" : rhetoricsType === "kavita" ? "Kavita" : "Opening Speech"}
                 </p>
                 <div className={cn(
-                  "px-5 py-4 shadow-sm rounded-2xl rounded-tl-sm text-foreground w-full transition-all duration-200",
+                   "w-full rounded-2xl rounded-tl-sm px-3.5 py-3 text-foreground shadow-sm transition-all duration-200 sm:px-5 sm:py-4",
                   rhetoricsType === "kavita"  ? "bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800"
                     : rhetoricsType === "debate" ? "bg-rose-50/80 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800"
                     : "bg-muted"
@@ -1153,7 +1207,7 @@ export function ChatArea({
           )}
 
           {!isStreaming && chatType === "rhetorics" && rhetoricsType === "debate" && debateSuggestions.length > 0 && (
-            <div className="max-w-5xl mx-auto pl-9 md:pl-12 px-3 md:px-4">
+            <div className="mx-auto max-w-5xl px-1.5 sm:px-3 sm:pl-10 md:px-4 md:pl-12">
               <p className="text-[10px] font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">💬 Counter-arguments</p>
               <div className="flex flex-col gap-1.5">
                 {debateSuggestions.map((s, i) => (
@@ -1171,7 +1225,7 @@ export function ChatArea({
 
       {/* Input area */}
       <div className={cn(
-        "shrink-0 border-t border-border/70 bg-background/95 px-1.5 py-1 safe-area-inset-bottom md:px-2",
+        "shrink-0 border-t border-border/70 bg-background/95 px-2 py-2 safe-area-inset-bottom sm:px-3 md:px-2",
         showResearchRail && "lg:mr-[344px]"
       )}>
         {connectionWarn && (
@@ -1186,7 +1240,7 @@ export function ChatArea({
             </button>
           </div>
         )}
-          <div className="relative isolate mx-auto flex max-w-4xl flex-col gap-1.5 px-3 pt-1.5 pb-1.5 md:px-4 md:pb-2">
+          <div className="relative isolate mx-auto flex w-full max-w-4xl flex-col gap-1.5 px-0 md:px-4 md:pb-2">
           <ChatComposer
             input={input}
             onInputChange={setInput}
@@ -1221,11 +1275,11 @@ export function ChatArea({
             }
             onSelectChip={(id: ChatModeChipId) => {
               if (id === "drafting") { setChatType("research"); setCurrentMode("normal"); }
-              else if (id === "rhetorics") { setChatType("rhetorics"); }
+              else if (id === "rhetorics") { setChatType("rhetorics"); setShowOptions(true); }
               else if (id === "fast") { setChatType("research"); setCurrentMode("fast_research"); }
               else if (id === "deep") { setChatType("research"); setCurrentMode("deep_research"); }
               else if (id === "council") { setChatType("research"); setCurrentMode("council"); }
-              setShowOptions(false);
+              if (id !== "rhetorics") setShowOptions(false);
               focusInput();
             }}
             enhancedNotice={enhancedFrom
@@ -1256,12 +1310,35 @@ export function ChatArea({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.98 }}
               transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="absolute bottom-[6.75rem] left-2 right-2 z-30 max-h-[42vh] overflow-y-auto rounded-2xl border border-border/70 bg-popover/95 p-2 text-popover-foreground shadow-[0_24px_80px_rgba(15,23,42,0.22)] md:left-3 md:right-3 dark:border-[#2a2d38] dark:bg-[#0d0e12]/95 dark:shadow-[0_24px_80px_rgba(0,0,0,0.48)]"
+              className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-30 max-h-[min(48vh,24rem)] overflow-y-auto rounded-2xl border border-border/70 bg-popover/95 p-2 text-popover-foreground shadow-[0_24px_80px_rgba(15,23,42,0.22)] md:left-4 md:right-4 dark:border-[#2a2d38] dark:bg-[#0d0e12]/95 dark:shadow-[0_24px_80px_rgba(0,0,0,0.48)]"
             >
+              <div className="mb-2 flex items-center justify-between gap-2 border-b border-border/60 px-1 pb-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">
+                    {chatType === "rhetorics" ? "Rhetorics controls" : "Model selection"}
+                  </p>
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    {chatType === "rhetorics"
+                      ? "Tune speech mode and creativity."
+                      : currentMode === "normal"
+                        ? simplifyModelName(normalModel)
+                        : `${selectedModelCount} model${selectedModelCount === 1 ? "" : "s"} selected`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowOptions(false)}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-background/70 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  aria-label="Close options"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
               {/* ── Level 2: Sub-modes ────────────────────────────────────── */}
               {chatType === "rhetorics" && (
                 <div className="space-y-2.5">
-                  <div className="flex items-center gap-1.5 rounded-2xl border border-border/60 bg-card/70 p-1.5 backdrop-blur-xl">
+                  <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-border/60 bg-card/70 p-1.5 backdrop-blur-xl">
                     {([
                       { id: "kavita" as RhetoricsType, label: "Kavita" },
                       { id: "speech" as RhetoricsType, label: "Opening Speech" },
@@ -1269,7 +1346,7 @@ export function ChatArea({
                     ]).map(({ id, label }) => (
                       <button key={id} onClick={() => setRhetoricsType(id)}
                         className={cn(
-                          "flex-1 rounded-xl border px-2 py-1.5 text-[10px] font-semibold transition-all md:text-[11px]",
+                          "min-h-9 rounded-xl border px-2 py-1.5 text-[10px] font-semibold leading-tight transition-all md:text-[11px]",
                           rhetoricsType === id
                             ? "border-slate-300 bg-slate-100 text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200"
                             : "text-muted-foreground hover:text-foreground hover:bg-background/50 border-transparent",
@@ -1333,110 +1410,101 @@ export function ChatArea({
 
           {/* ── Model Selection Panel (research only) ─────────────────── */}
           {chatType === "research" && (
-            <>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="flex h-auto w-full items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-left transition-colors hover:border-border hover:bg-muted/50"
-                    data-testid="button-model-dropdown-toggle"
-                  >
-                    <div className="flex min-w-0 flex-col items-start gap-0.5">
-                      <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                        <Zap className="h-3.5 w-3.5 text-primary" />
-                        {currentMode === "normal" ? "Selected Model" : "Selected Models"}
-                      </span>
-                      <span className="w-full truncate text-[10px] text-muted-foreground">
-                        {currentMode === "normal"
-                          ? simplifyModelName(normalModel)
-                          : activeModeModels.map(simplifyModelName).join(", ") || "None selected"}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={modelSearch}
+                  onChange={(event) => setModelSearch(event.target.value)}
+                  placeholder="Search models..."
+                  className="h-10 w-full rounded-xl border border-border/70 bg-background/70 pl-9 pr-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-[#3b6fd470] focus:ring-2 focus:ring-[#3b6fd420]"
+                  data-testid="input-model-search"
+                />
+              </div>
 
-              {/* Dropdown menu renders through the shared Radix portal. */}
-              <DropdownMenuContent
-                align="start"
-                side="top"
-                sideOffset={8}
-                avoidCollisions={false}
-                className="z-[100] max-h-[min(62vh,460px)] w-[min(480px,calc(100vw-2rem))] rounded-xl border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-[#2a2d38] dark:bg-[#0d0e12] dark:text-[#eeeef5] dark:shadow-[0_24px_80px_rgba(0,0,0,0.58)]"
-              >
-                {currentMode !== "normal" && (
-                  <>
-                    <DropdownMenuLabel className="flex items-center justify-between px-2 py-1.5 text-xs">
-                      <span>Research models</span>
-                      <span className="rounded-md border border-[#3b6fd440] bg-[#3b6fd420] px-1.5 py-0.5 text-[10px] font-semibold text-[#6f93e8]">
-                        {activeModeModels.length} selected
-                      </span>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-border dark:bg-[#2a2d38]" />
-                  </>
-                )}
-
-                {currentMode === "normal" ? (
-                  <DropdownMenuRadioGroup value={normalModel} onValueChange={setNormalModel}>
-                    {!hasModelOptions && (
-                      <DropdownMenuItem disabled className="rounded-lg px-2 py-2 text-xs text-muted-foreground">
-                        No provider models available
-                      </DropdownMenuItem>
-                    )}
-                    {modelGroups.map(({ provider, models }) => models.length > 0 && (
-                      <div key={provider}>
-                        <DropdownMenuLabel className="px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                          {provider}
-                        </DropdownMenuLabel>
-                        {models.map((m) => {
-                          const modelId = `${provider.toLowerCase()}/${m.id}`;
-                          return (
-                            <DropdownMenuRadioItem
-                              key={modelId}
-                              value={modelId}
-                              className="gap-2 rounded-lg py-2 pl-8 pr-2 text-xs text-popover-foreground focus:bg-[#3b6fd414] focus:text-foreground dark:text-[#c7c7d4] dark:focus:text-[#eeeef5]"
-                            >
-                              <span className="min-w-0 flex-1 truncate">{m.name || simplifyModelName(m.id)}</span>
-                              <span className="ml-2 shrink-0 text-[10px] text-muted-foreground">{getModelIcon(m.id)}</span>
-                            </DropdownMenuRadioItem>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </DropdownMenuRadioGroup>
+              <div className="max-h-[min(34vh,18rem)] space-y-2 overflow-y-auto pr-1">
+                {!hasModelOptions ? (
+                  <div className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-xs text-muted-foreground">
+                    No provider models available.
+                  </div>
+                ) : filteredModelGroups.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-xs text-muted-foreground">
+                    No models match “{modelSearch.trim()}”.
+                  </div>
                 ) : (
-                  <>
-                    {!hasModelOptions && (
-                      <DropdownMenuItem disabled className="rounded-lg px-2 py-2 text-xs text-muted-foreground">
-                        No provider models available
-                      </DropdownMenuItem>
-                    )}
-                    {modelGroups.map(({ provider, models }) => models.length > 0 && (
-                      <div key={provider}>
-                        <DropdownMenuLabel className="px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                          {provider}
-                        </DropdownMenuLabel>
-                        {models.map((m) => {
-                          const modelId = `${provider.toLowerCase()}/${m.id}`;
-                          return (
-                            <DropdownMenuCheckboxItem
-                              key={modelId}
-                              checked={activeModeModels.includes(modelId)}
-                              onCheckedChange={() => toggleModelInList(activeModeModels, activeModeModelSetter, modelId)}
-                              onSelect={(event) => event.preventDefault()}
-                              className="gap-2 rounded-lg py-2 pl-8 pr-2 text-xs text-popover-foreground focus:bg-[#3b6fd414] focus:text-foreground dark:text-[#c7c7d4] dark:focus:text-[#eeeef5]"
-                            >
-                              <span className="min-w-0 flex-1 truncate">{m.name || simplifyModelName(m.id)}</span>
-                              <span className="ml-2 shrink-0 text-[10px] text-muted-foreground">{getModelIcon(m.id)}</span>
-                            </DropdownMenuCheckboxItem>
-                          );
-                        })}
+                  filteredModelGroups.map(({ provider, models }) => (
+                    <div key={provider} className="space-y-1">
+                      <div className="px-1 text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                        {provider}
                       </div>
-                    ))}
-                  </>
+                      {models.map((model) => {
+                        const modelId = `${provider.toLowerCase()}/${model.id}`;
+                        const selected = currentMode === "normal"
+                          ? normalModel === modelId
+                          : activeModeModels.includes(modelId);
+                        return (
+                          <button
+                            key={modelId}
+                            type="button"
+                            onClick={() => {
+                              if (currentMode === "normal") {
+                                setNormalModel(modelId);
+                                setModelSelectionDirty(true);
+                              } else {
+                                toggleModelInList(activeModeModels, activeModeModelSetter, modelId);
+                              }
+                            }}
+                            aria-pressed={selected}
+                            className={cn(
+                              "flex min-h-10 w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition",
+                              selected
+                                ? "border-[#3b6fd450] bg-[#3b6fd414] text-foreground"
+                                : "border-border/55 bg-background/45 text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground",
+                            )}
+                          >
+                            <span className={cn(
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px]",
+                              selected
+                                ? "border-[#3b6fd450] bg-[#3b6fd4] text-white"
+                                : "border-border/70 bg-card text-muted-foreground",
+                            )}>
+                              {selected ? <Check className="h-3 w-3" /> : getModelIcon(model.id)}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs font-medium">
+                                {model.name || simplifyModelName(model.id)}
+                              </span>
+                              <span className="block truncate text-[10px] text-muted-foreground">
+                                {provider} / {simplifyModelName(model.id)}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))
                 )}
-              </DropdownMenuContent>
-              </DropdownMenu>
-            </>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+                <span className="truncate text-[10px] text-muted-foreground">
+                  {currentMode === "normal"
+                    ? `Selected: ${simplifyModelName(normalModel)}`
+                    : `${selectedModelCount} selected for ${MODE_META[currentMode].label}`}
+                </span>
+                {modelSelectionDirty && (
+                  <button
+                    type="button"
+                    onClick={saveModelSelection}
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-[#2A3342] px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-[#1D2533]"
+                    data-testid="button-save-models"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Save models
+                  </button>
+                )}
+              </div>
+            </div>
           )}
             </motion.div>
           )}
