@@ -90,3 +90,7 @@ Thumbs.db
 .env.local
 .env.*
 *.env.*
+
+# Keep safe env templates trackable
+!.env.example
+!backend/.env.example
