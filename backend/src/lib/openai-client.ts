@@ -29,5 +29,6 @@ export const openaiClient: OpenAI | null = process.env.OPENAI_API_KEY
       apiKey: process.env.OPENAI_API_KEY,
       timeout: 60_000,
       maxRetries: 2,
+      fetch: multiKeyFetch as any,
     })
   : null;

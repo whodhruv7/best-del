@@ -34,5 +34,6 @@ export const cerebrasClient: OpenAI | null = process.env.CEREBRAS_API_KEY
       baseURL: CEREBRAS_BASE_URL,
       timeout: 30_000,
       maxRetries: 2,
+      fetch: multiKeyFetch as any,
     })
   : null;

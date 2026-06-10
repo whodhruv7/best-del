@@ -39,5 +39,6 @@ export const nvidiaClient: OpenAI | null = process.env.NVIDIA_API_KEY
   ? new OpenAI({
       baseURL: NVIDIA_BASE_URL,
       apiKey: process.env.NVIDIA_API_KEY,
+      fetch: multiKeyFetch as any,
     })
   : null;

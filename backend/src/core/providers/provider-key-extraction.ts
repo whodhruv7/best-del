@@ -44,6 +44,17 @@ function cleanProviderValue(value: string | undefined | null): string | null {
   return trimmed;
 }
 
+function splitProviderValues(value: string | undefined | null): string[] {
+  return value
+    ?.split(",")
+    .map((part) => cleanProviderValue(part))
+    .filter((part): part is string => Boolean(part)) ?? [];
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values));
+}
+
 export function extractProviderKeys(req: ProviderKeyRequest, env: ProviderKeyEnv = process.env): RequestKeys {
   const normalizedHeaders = Object.fromEntries(
     Object.entries(req.headers ?? {}).map(([name, value]) => [name.toLowerCase(), value]),
@@ -52,17 +63,21 @@ export function extractProviderKeys(req: ProviderKeyRequest, env: ProviderKeyEnv
     const value = normalizedHeaders[name.toLowerCase()];
     if (!value) return null;
     const first = Array.isArray(value) ? value[0] : value;
-    return cleanProviderValue(first);
+    const values = splitProviderValues(first);
+    return values.length ? values.join(",") : null;
   };
 
   const getEnvKey = (baseName: string): string | null => {
+    const numbered: string[] = [];
     for (let i = 1; i <= 5; i++) {
       const val = (env as Record<string, string | undefined>)[`${baseName}_${i}`];
-      const cleaned = cleanProviderValue(val);
-      if (cleaned) return cleaned;
+      numbered.push(...splitProviderValues(val));
     }
 
-    return cleanProviderValue((env as Record<string, string | undefined>)[baseName]);
+    if (numbered.length) return unique(numbered).join(",");
+
+    const direct = splitProviderValues((env as Record<string, string | undefined>)[baseName]);
+    return direct.length ? unique(direct).join(",") : null;
   };
 
   return {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { allExtractorProviders, allSearchProviders } from "./search-provider-router.js";
 import { classifyProviderError, safeProviderError } from "./search-provider-errors.js";
+import { multiKeyFetch } from "../../lib/multi-key-fetch.js";
 import type { SearchProviderHealth, SearchProviderKeys } from "./search-provider-types.js";
 
 const statusCache = new Map<string, { expiresAt: number; payload: Record<string, SearchProviderHealth> }>();
@@ -14,10 +15,11 @@ export async function buildSearchProviderStatus(
   const cached = statusCache.get(cacheKey);
   if (!options.bypassCache && cached && cached.expiresAt > now) return cached.payload;
   const providers = [...allSearchProviders(), ...allExtractorProviders()];
+  const fetchFn = options.fetchFn ?? multiKeyFetch;
   const settled = await Promise.allSettled(providers.map(async (provider) => {
     try {
       const health = provider.healthCheck
-        ? await provider.healthCheck(keys, { fetchFn: options.fetchFn, timeoutMs: options.timeoutMs ?? 6000 })
+        ? await provider.healthCheck(keys, { fetchFn, timeoutMs: options.timeoutMs ?? 6000 })
         : missing(provider.name);
       return [provider.name, { ...health, configuredFrom: configuredFrom(provider.name, keys, options.configuredFrom) }] as const;
     } catch (error) {

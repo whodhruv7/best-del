@@ -10,8 +10,8 @@ export const tavilySearchProvider: SearchProvider = {
     if (!key) throw new SearchProviderError("tavily", "missing_key", "Tavily API key is not configured");
     const response = await fetchWithTimeout(options.fetchFn ?? fetch, "https://api.tavily.com/search", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: key, query: query.query, search_depth: query.mode === "web" ? "basic" : "advanced", max_results: query.maxResults ?? 10, include_answer: false }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ query: query.query, search_depth: query.mode === "web" ? "basic" : "advanced", max_results: query.maxResults ?? 10, include_answer: false }),
       signal: options.abortSignal,
     }, options.timeoutMs ?? 12000);
     if (!response.ok) throw new SearchProviderError("tavily", statusFromHttp(response.status), `Tavily search failed: ${response.status} ${await safeResponseText(response)}`, response.status);

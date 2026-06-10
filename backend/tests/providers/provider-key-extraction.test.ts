@@ -72,7 +72,7 @@ test("extractProviderKeys supports server env fallback", () => {
   assert.equal(keys.hfToken, "hf-env");
 });
 
-test("extractProviderKeys uses numbered rollback keys without comma joining", () => {
+test("extractProviderKeys joins numbered fallback keys in priority order", () => {
   const keys = extractProviderKeys({ headers: {} }, {
     GROQ_API_KEY_1: "gsk-env-1",
     GROQ_API_KEY_2: "gsk-env-2",
@@ -82,11 +82,10 @@ test("extractProviderKeys uses numbered rollback keys without comma joining", ()
     FIRECRAWL_API_KEY_1: "fc-env-1",
   } as ProviderKeyEnv);
 
-  assert.equal(keys.groqKey, "gsk-env-1");
+  assert.equal(keys.groqKey, "gsk-env-1,gsk-env-2");
   assert.equal(keys.openrouterKey, "or-env-1");
-  assert.equal(keys.tavilyKey, "tvly-env-1");
+  assert.equal(keys.tavilyKey, "tvly-env-1,tvly-env-2");
   assert.equal(keys.firecrawlKey, "fc-env-1");
-  assert.ok(!keys.tavilyKey?.includes(","));
 });
 
 test("extractProviderKeys ignores placeholder rollback values", () => {
@@ -99,4 +98,16 @@ test("extractProviderKeys ignores placeholder rollback values", () => {
 
   assert.equal(keys.tavilyKey, "tvly-env-2");
   assert.equal(keys.firecrawlKey, "fc-env-2");
+});
+
+test("extractProviderKeys preserves comma-separated header fallback keys", () => {
+  const keys = extractProviderKeys({
+    headers: {
+      "x-tavily-api-key": " tvly-1, your_tavily_api_key_2, tvly-3 ",
+      "x-groq-api-key": "gsk-1,gsk-2",
+    },
+  }, {});
+
+  assert.equal(keys.tavilyKey, "tvly-1,tvly-3");
+  assert.equal(keys.groqKey, "gsk-1,gsk-2");
 });
