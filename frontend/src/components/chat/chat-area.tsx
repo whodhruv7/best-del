@@ -1061,7 +1061,10 @@ export function ChatArea({
           )}
 
           {researchRunAvailable && showLiveResearchRun && isStreaming && effectiveMode !== "council" && (
-            <div className="mx-auto w-full max-w-5xl px-1.5 animate-bubble-in sm:px-3 sm:pl-10 md:px-4 md:pl-12">
+            <div className={cn(
+              "mx-auto w-full px-1.5 animate-bubble-in sm:px-3 sm:pl-10 md:px-4 md:pl-12",
+              showResearchRail ? "max-w-[calc(100vw-380px)] lg:max-w-3xl" : "max-w-5xl"
+            )}>
               <ResearchPipeline
                 mode={effectiveMode as Exclude<ChatMode, "council">}
                 modelConfig="standard"
