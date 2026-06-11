@@ -20,6 +20,11 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const authRedirectUrl = () => {
+    const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+    return new URL("/auth", appUrl).toString();
+  };
+
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && session) {
@@ -34,12 +39,9 @@ export default function AuthPage() {
     // In production, set VITE_APP_URL to your deployed domain (e.g. https://bestdel.app).
     // This MUST match the "Site URL" and "Redirect URLs" in your Supabase dashboard,
     // and the authorized redirect URIs in Google Cloud Console OAuth client.
-    const redirectTo = import.meta.env.VITE_APP_URL
-      ? `${import.meta.env.VITE_APP_URL}/`
-      : `${window.location.origin}/`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo },
+      options: { redirectTo: authRedirectUrl() },
     });
     if (error) {
       setError(error.message);
@@ -61,9 +63,7 @@ export default function AuthPage() {
         email,
         password,
         options: {
-          emailRedirectTo: import.meta.env.VITE_APP_URL
-            ? `${import.meta.env.VITE_APP_URL}/`
-            : `${window.location.origin}/`,
+          emailRedirectTo: authRedirectUrl(),
         },
       });
       if (error) {
