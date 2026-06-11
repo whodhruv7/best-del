@@ -1184,7 +1184,7 @@ export function ResearchPipeline({
   };
 
   return (
-    <div className="research-pipeline-shell w-full overflow-hidden rounded-2xl border border-border/50 bg-background/95 shadow-sm mb-6">
+    <div className="research-pipeline-shell w-full min-w-0 overflow-hidden rounded-2xl border border-border/50 bg-background/95 shadow-sm mb-6">
 
       {/* ── Phase header bar ───────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-muted/30">

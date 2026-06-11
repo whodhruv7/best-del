@@ -749,10 +749,22 @@ export function useChatRunController({
         keepaliveWorker = null;
       }
       const serverAssistantMessageId = globalStreamRegistry.getActiveRun().assistantMessageId;
-      if (streamSucceeded && gotContent && streamedAssistantText.trim() && serverAssistantMessageId == null) {
-        mergeStreamedAssistantMessage(queryClient, convId, streamedAssistantText);
-      }
-      if (streamSucceeded) {
+      // Fix (Bug: L696): Only add optimistic message if hydration from server will definitely not find it.
+      // Skip merge if we're about to hydrate from server anyway, since server-side message is authoritative.
+      // Only add optimistic message for modes where server explicitly doesn't return assistantMessageId (rare edge case).
+      // For normal/most flows: hydrate first, then check if we need the optimistic fallback.
+      if (streamSucceeded && gotContent && streamedAssistantText.trim()) {
+        // Always hydrate from server first — it's the source of truth
+        await hydrateConversationFromServer(queryClient, convId);
+        // Only add optimistic message if the hydration didn't find it AND serverAssistantMessageId was never set
+        const currentConv = queryClient.getQueryData(getGetAnthropicConversationQueryKey(convId)) as AnthropicConversation | undefined;
+        const hasMessage = currentConv?.messages?.some(
+          msg => msg.role === "assistant" && msg.content.trim() === streamedAssistantText.trim()
+        );
+        if (!hasMessage && serverAssistantMessageId == null) {
+          mergeStreamedAssistantMessage(queryClient, convId, streamedAssistantText);
+        }
+      } else if (streamSucceeded) {
         await hydrateConversationFromServer(queryClient, convId);
       }
       if (streamRunId) globalStreamRegistry.abortRun(streamRunId);
