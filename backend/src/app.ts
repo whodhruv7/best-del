@@ -12,6 +12,8 @@ import { logger } from "./lib/logger.js";
 import { ProviderRouterError } from "./lib/provider-router.js";
 import { QueueFullError } from "./lib/request-queue.js";
 import { config } from "./config.js";
+import { getSupabaseClient, hasSupabaseConfig } from "./db.js";
+import { LOCAL_DEV_USER_ID, decodeJwtPayload } from "./lib/request-auth.js";
 
 // Conditional Redis store for distributed rate limiting
 async function buildRateLimitStore() {
@@ -175,39 +177,56 @@ app.use("/api", generalLimiter);
 
 // ── Internal API key auth (all /api routes except /healthz) ──────────────
 const API_SECRET = process.env.INTERNAL_API_SECRET?.trim();
-app.use("/api", (req, res, next) => {
+app.use("/api", async (req, res, next) => {
   // Skip auth for health probes
   if (req.path === "/healthz") return next();
 
   // 1. Shared-secret path (server-to-server, CI, curl)
   const providedSecret = (req.headers["x-api-key"] as string | undefined)?.trim();
   if (API_SECRET && providedSecret && providedSecret === API_SECRET) {
+    req.authUserId = (req.headers["x-bestdel-user-id"] as string | undefined)?.trim() || "internal-api";
+    req.authProvider = "internal";
     return next();
   }
 
   // 2. Supabase JWT path (browser frontend — token from Supabase session)
   const authHeader = (req.headers["authorization"] as string | undefined) ?? "";
   if (authHeader.startsWith("Bearer ")) {
-    // We trust the token only if SUPABASE_JWT_SECRET is not configured;
-    // with it configured, verify properly. For now: presence check is
-    // sufficient for single-tenant self-hosted installs.
-    // TODO: add full JWT verification with SUPABASE_JWT_SECRET when
-    // running multi-tenant.
+    const token = authHeader.slice("Bearer ".length).trim();
+    if (hasSupabaseConfig()) {
+      try {
+        const { data, error } = await getSupabaseClient().auth.getUser(token);
+        if (!error && data.user?.id) {
+          req.authUserId = data.user.id;
+          req.authUserEmail = data.user.email ?? undefined;
+          req.authProvider = "supabase";
+          return next();
+        }
+      } catch (err) {
+        req.log?.warn?.({ err }, "Supabase JWT validation failed");
+      }
+      if (process.env.NODE_ENV === "production") {
+        res.status(401).json({ error: "Invalid session", code: "invalid_session" });
+        return;
+      }
+    }
+
+    const payload = decodeJwtPayload(token);
+    const sub = typeof payload?.sub === "string" ? payload.sub : "";
+    req.authUserId = sub || LOCAL_DEV_USER_ID;
+    req.authUserEmail = typeof payload?.email === "string" ? payload.email : undefined;
+    req.authProvider = sub ? "supabase" : "local-dev";
     return next();
   }
 
   // 3. No secret configured in dev → allow through with a warning
   if (!API_SECRET && process.env.NODE_ENV !== "production") {
+    req.authUserId = LOCAL_DEV_USER_ID;
+    req.authProvider = "local-dev";
     return next();
   }
 
-  // 4. Production with secret configured but no valid credential
-  if (process.env.NODE_ENV === "production" && API_SECRET) {
-    res.status(401).json({ error: "Unauthorized", code: "unauthorized" });
-    return;
-  }
-
-  next();
+  res.status(401).json({ error: "Unauthorized", code: "unauthorized" });
 });
 
 // Apply mode-aware limiter to the research trigger endpoint

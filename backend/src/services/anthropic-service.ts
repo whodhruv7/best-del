@@ -67,6 +67,7 @@ import { detectFreshnessNeeded } from "../core/freshness/freshness-router.js";
 import { getSourceUsagePolicy } from "../core/config/source-usage-policy.js";
 import { ProviderRouter as CoreProviderRouter } from "../core/providers/provider-router.js";
 import { multiKeyFetch } from "../lib/multi-key-fetch.js";
+import { getRequestOwnerId } from "../lib/request-auth.js";
 import { GroqProvider } from "../core/providers/groq-provider.js";
 import { OpenRouterProvider } from "../core/providers/openrouter-provider.js";
 import { GeminiProvider } from "../core/providers/gemini-provider.js";
@@ -1726,33 +1727,36 @@ export const __councilTestHooks = {
 // â”€â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.get("/anthropic/conversations", async (req, res) => {
+  const ownerUserId = getRequestOwnerId(req);
   const queryParsed = ListAnthropicConversationsQuery.safeParse(req.query);
   if (!queryParsed.success) {
     res.status(400).json({ error: "Invalid query" });
     return;
   }
   const convos = queryParsed.data.archiveId
-    ? await getConversationsByArchiveId(queryParsed.data.archiveId)
-    : await listConversations();
+    ? await getConversationsByArchiveId(queryParsed.data.archiveId, ownerUserId)
+    : await listConversations(ownerUserId);
   res.json(convos.map(toApiConversation));
 });
 
 router.post("/anthropic/conversations", async (req, res) => {
+  const ownerUserId = getRequestOwnerId(req);
   const parsed = CreateAnthropicConversationBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
-  const archive = await getArchiveById(parsed.data.archiveId);
+  const archive = await getArchiveById(parsed.data.archiveId, ownerUserId);
   if (!archive) { res.status(404).json({ error: "Archive not found" }); return; }
-  const convo = await createConversation(parsed.data.archiveId, parsed.data.title);
+  const convo = await createConversation(parsed.data.archiveId, parsed.data.title, ownerUserId);
   res.status(201).json(toApiConversation(convo));
 });
 
 // Update conversation title
 router.patch("/anthropic/conversations/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const ownerUserId = getRequestOwnerId(req);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   if (!title) { res.status(400).json({ error: "title is required" }); return; }
-  const updated = await updateConversationTitle(id, title.slice(0, 200));
+  const updated = await updateConversationTitle(id, title.slice(0, 200), ownerUserId);
   if (!updated) { res.status(404).json({ error: "Conversation not found" }); return; }
   res.json(toApiConversation(updated));
 });
@@ -1806,25 +1810,30 @@ router.post("/anthropic/generate-title", async (req, res) => {
 });
 
 router.get("/anthropic/conversations/:id", async (req, res) => {
+  const ownerUserId = getRequestOwnerId(req);
   const parsed = GetAnthropicConversationParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
-  const convo = await getConversationById(parsed.data.id);
+  const convo = await getConversationById(parsed.data.id, ownerUserId);
   if (!convo) { res.status(404).json({ error: "Conversation not found" }); return; }
   const msgs = await getMessagesByConversationId(parsed.data.id);
   res.json({ ...toApiConversation(convo), messages: msgs.map(toApiMessage) });
 });
 
 router.delete("/anthropic/conversations/:id", async (req, res) => {
+  const ownerUserId = getRequestOwnerId(req);
   const parsed = DeleteAnthropicConversationParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
-  const deleted = await deleteConversation(parsed.data.id);
+  const deleted = await deleteConversation(parsed.data.id, ownerUserId);
   if (!deleted) { res.status(404).json({ error: "Conversation not found" }); return; }
   res.status(204).end();
 });
 
 router.get("/anthropic/conversations/:id/messages", async (req, res) => {
+  const ownerUserId = getRequestOwnerId(req);
   const parsed = ListAnthropicMessagesParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const convo = await getConversationById(parsed.data.id, ownerUserId);
+  if (!convo) { res.status(404).json({ error: "Conversation not found" }); return; }
   const msgs = await getMessagesByConversationId(parsed.data.id);
   res.json(msgs.map(toApiMessage));
 });
@@ -4763,6 +4772,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
   if (!paramsParsed.success || !bodyParsed.success) { res.status(400).json({ error: "Invalid request" }); return; }
 
   const conversationId = paramsParsed.data.id;
+  const ownerUserId = getRequestOwnerId(req);
   const userContent = bodyParsed.data.content;
   const mode = bodyParsed.data.mode ?? "normal";
   const freshnessDecision = detectFreshnessNeeded(userContent, mode);
@@ -4828,10 +4838,10 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
   // Pre-flight DB operations wrapped in try/catch to handle errors before SSE setup
   let convo, archive, archiveContext, userMessage, assistantMessage, combinedSystemPrompt;
   try {
-    convo = await getConversationById(conversationId);
+    convo = await getConversationById(conversationId, ownerUserId);
     if (!convo) { res.status(404).json({ error: "Conversation not found" }); return; }
     const archiveId = convo.archive_id ?? null;
-    archive = archiveId ? await getArchiveById(archiveId) : null;
+    archive = archiveId ? await getArchiveById(archiveId, ownerUserId) : null;
     archiveContext = archiveId ? await getArchiveContext(archiveId) : null;
     const archiveTopic = archive?.topic?.trim() || "";
     const archiveSummary = archiveContext?.summary?.trim() || "";

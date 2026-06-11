@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Settings as SettingsIcon, Sparkles, RotateCcw, Key, RefreshCw } from "lucide-react";
+import { Settings as SettingsIcon, Sparkles, RotateCcw, Key, RefreshCw, LogOut } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useProviderModels } from "@/hooks/use-provider-models";
+import { useAuth } from "@/hooks/use-auth";
 import {
   DEFAULT_PROVIDER_KEYS,
   PROVIDER_KEY,
@@ -96,6 +98,8 @@ interface SettingsDialogProps {
 type TabKey = keyof SystemPrompts | "providers";
 
 export function SettingsDialog({ open, onOpenChange, onSave }: SettingsDialogProps) {
+  const queryClient = useQueryClient();
+  const { user, signOut } = useAuth();
   const [prompts, setPrompts] = useState<SystemPrompts>(DEFAULT_PROMPTS);
   const [keys, setKeys] = useState<ProviderKeys>(DEFAULT_PROVIDER_KEYS);
   const [savedKeys, setSavedKeys] = useState<ProviderKeys>(DEFAULT_PROVIDER_KEYS);
@@ -154,6 +158,13 @@ const handleSave = async () => {
   const handleReset = () => {
     if (tab === "providers") setKeys(DEFAULT_PROVIDER_KEYS);
     else setPrompts(DEFAULT_PROMPTS);
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    queryClient.clear();
+    onOpenChange(false);
+    window.location.assign("/auth");
   };
 
   return (
@@ -460,10 +471,18 @@ const label = dirty
         </Tabs>
 
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs gap-1.5 mr-auto">
-            <RotateCcw className="w-3 h-3" />
-            Reset {tab === "providers" ? "keys" : "all"}
-          </Button>
+          <div className="mr-auto flex flex-wrap gap-2">
+            <Button variant="ghost" size="sm" onClick={handleReset} className="text-xs gap-1.5">
+              <RotateCcw className="w-3 h-3" />
+              Reset {tab === "providers" ? "keys" : "all"}
+            </Button>
+            {user && (
+              <Button variant="outline" size="sm" onClick={handleLogout} className="text-xs gap-1.5">
+                <LogOut className="w-3 h-3" />
+                Log out
+              </Button>
+            )}
+          </div>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button size="sm" onClick={handleSave}>Save</Button>
         </DialogFooter>

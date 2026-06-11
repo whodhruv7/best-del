@@ -7,6 +7,7 @@ import WebSocket from 'ws';
 // Supabase table types
 export interface ArchiveRecord {
   id: number;
+  owner_user_id?: string | null;
   name: string;
   topic: string;
   researchAngles?: string[];
@@ -16,6 +17,7 @@ export interface ArchiveRecord {
 
 export interface ConversationRecord {
   id: number;
+  owner_user_id?: string | null;
   archive_id: number;
   title: string;
   created_at: string;
@@ -267,28 +269,33 @@ export function toApiMessage(record: MessageRecord): ApiMessageRecord {
   };
 }
 
-export async function listArchives(): Promise<ArchiveRecord[]> {
+export async function listArchives(ownerUserId?: string): Promise<ArchiveRecord[]> {
   if (isUsingLocalDb()) {
     const state = await loadLocalDb();
-    return [...state.archives].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return state.archives
+      .filter((archive) => !ownerUserId || archive.owner_user_id === ownerUserId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('archives')
     .select('*')
     .order('created_at', { ascending: true });
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { data, error } = await query;
 
   if (error) throw error;
   return data || [];
 }
 
-export async function createArchive(name: string, topic: string): Promise<ArchiveRecord> {
+export async function createArchive(name: string, topic: string, ownerUserId?: string): Promise<ArchiveRecord> {
   if (isUsingLocalDb()) {
     return mutateLocalDb((state) => {
       const now = new Date().toISOString();
       const archive: ArchiveRecord = {
         id: state.nextIds.archive++,
+        owner_user_id: ownerUserId ?? null,
         name,
         topic,
         created_at: now,
@@ -304,7 +311,7 @@ export async function createArchive(name: string, topic: string): Promise<Archiv
   
   const { data, error } = await supabase
     .from('archives')
-    .insert([{ name, topic, created_at: now, updated_at: now }])
+    .insert([{ name, topic, owner_user_id: ownerUserId ?? null, created_at: now, updated_at: now }])
     .select()
     .single();
 
@@ -314,11 +321,12 @@ export async function createArchive(name: string, topic: string): Promise<Archiv
 
 export async function updateArchive(
   id: number,
-  updates: { name?: string; topic?: string }
+  updates: { name?: string; topic?: string },
+  ownerUserId?: string,
 ): Promise<ArchiveRecord | null> {
   if (isUsingLocalDb()) {
     return mutateLocalDb((state) => {
-      const found = state.archives.find((archive) => archive.id === id);
+      const found = state.archives.find((archive) => archive.id === id && (!ownerUserId || archive.owner_user_id === ownerUserId));
       if (!found) return null;
       if (updates.name !== undefined) found.name = updates.name;
       if (updates.topic !== undefined) found.topic = updates.topic;
@@ -330,37 +338,41 @@ export async function updateArchive(
   const supabase = getSupabaseClient();
   const updateData: Partial<ArchiveRecord> = { ...updates, updated_at: new Date().toISOString() };
   
-  const { data, error } = await supabase
+  let query = supabase
     .from('archives')
     .update(updateData)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { data, error } = await query.single();
 
   if (error) throw error;
   return data;
 }
 
-export async function getArchiveById(id: number): Promise<ArchiveRecord | null> {
+export async function getArchiveById(id: number, ownerUserId?: string): Promise<ArchiveRecord | null> {
   if (isUsingLocalDb()) {
     const state = await loadLocalDb();
-    return state.archives.find((archive) => archive.id === id) ?? null;
+    return state.archives.find((archive) => archive.id === id && (!ownerUserId || archive.owner_user_id === ownerUserId)) ?? null;
   }
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('archives')
     .select('*')
-    .eq('id', id)
-    .single();
+    .eq('id', id);
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { data, error } = await query.single();
 
   if (error && error.code !== 'PGRST116') throw error;
   return data || null;
 }
 
-export async function deleteArchive(id: number): Promise<boolean> {
+export async function deleteArchive(id: number, ownerUserId?: string): Promise<boolean> {
   if (isUsingLocalDb()) {
     return mutateLocalDb((state) => {
+      const canDelete = state.archives.some((archive) => archive.id === id && (!ownerUserId || archive.owner_user_id === ownerUserId));
+      if (!canDelete) return false;
       state.archives = state.archives.filter((archive) => archive.id !== id);
       state.archiveContexts = state.archiveContexts.filter((context) => context.archive_id !== id);
       state.archiveResearchAngles = state.archiveResearchAngles.filter((angles) => angles.archive_id !== id);
@@ -370,41 +382,49 @@ export async function deleteArchive(id: number): Promise<boolean> {
   }
 
   const supabase = getSupabaseClient();
-  const { error } = await supabase.from('archives').delete().eq('id', id);
+  let query = supabase.from('archives').delete().eq('id', id);
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { error } = await query;
   if (error) throw error;
   return true;
 }
 
-export async function getConversationsByArchiveId(archiveId: number): Promise<ConversationRecord[]> {
+export async function getConversationsByArchiveId(archiveId: number, ownerUserId?: string): Promise<ConversationRecord[]> {
   if (isUsingLocalDb()) {
     const state = await loadLocalDb();
     return state.conversations
-      .filter((conversation) => conversation.archive_id === archiveId)
+      .filter((conversation) => conversation.archive_id === archiveId && (!ownerUserId || conversation.owner_user_id === ownerUserId))
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('conversations')
     .select('*')
     .eq('archive_id', archiveId)
     .order('created_at', { ascending: true });
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { data, error } = await query;
 
   if (error) throw error;
   return data || [];
 }
 
-export async function listConversations(): Promise<ConversationRecord[]> {
+export async function listConversations(ownerUserId?: string): Promise<ConversationRecord[]> {
   if (isUsingLocalDb()) {
     const state = await loadLocalDb();
-    return [...state.conversations].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return state.conversations
+      .filter((conversation) => !ownerUserId || conversation.owner_user_id === ownerUserId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('conversations')
     .select('*')
     .order('created_at', { ascending: true });
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { data, error } = await query;
 
   if (error) throw error;
   return data || [];
@@ -412,12 +432,14 @@ export async function listConversations(): Promise<ConversationRecord[]> {
 
 export async function createConversation(
   archiveId: number,
-  title: string
+  title: string,
+  ownerUserId?: string,
 ): Promise<ConversationRecord> {
   if (isUsingLocalDb()) {
     return mutateLocalDb((state) => {
       const conversation: ConversationRecord = {
         id: state.nextIds.conversation++,
+        owner_user_id: ownerUserId ?? null,
         archive_id: archiveId,
         title,
         created_at: new Date().toISOString(),
@@ -432,7 +454,7 @@ export async function createConversation(
   
   const { data, error } = await supabase
     .from('conversations')
-    .insert([{ archive_id: archiveId, title, created_at: now }])
+    .insert([{ archive_id: archiveId, owner_user_id: ownerUserId ?? null, title, created_at: now }])
     .select()
     .single();
 
@@ -440,27 +462,28 @@ export async function createConversation(
   return data;
 }
 
-export async function getConversationById(id: number): Promise<ConversationRecord | null> {
+export async function getConversationById(id: number, ownerUserId?: string): Promise<ConversationRecord | null> {
   if (isUsingLocalDb()) {
     const state = await loadLocalDb();
-    return state.conversations.find((conversation) => conversation.id === id) ?? null;
+    return state.conversations.find((conversation) => conversation.id === id && (!ownerUserId || conversation.owner_user_id === ownerUserId)) ?? null;
   }
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('conversations')
     .select('*')
-    .eq('id', id)
-    .single();
+    .eq('id', id);
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { data, error } = await query.single();
 
   if (error && error.code !== 'PGRST116') throw error;
   return data || null;
 }
 
-export async function updateConversationTitle(id: number, title: string): Promise<ConversationRecord | null> {
+export async function updateConversationTitle(id: number, title: string, ownerUserId?: string): Promise<ConversationRecord | null> {
   if (isUsingLocalDb()) {
     return mutateLocalDb((state) => {
-      const found = state.conversations.find((conversation) => conversation.id === id);
+      const found = state.conversations.find((conversation) => conversation.id === id && (!ownerUserId || conversation.owner_user_id === ownerUserId));
       if (!found) return null;
       found.title = title;
       return found;
@@ -468,19 +491,20 @@ export async function updateConversationTitle(id: number, title: string): Promis
   }
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('conversations')
     .update({ title })
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { data, error } = await query.single();
 
   if (error && error.code !== 'PGRST116') throw error;
   return data || null;
 }
 
-export async function deleteConversation(id: number): Promise<ConversationRecord | null> {
-  const conversation = await getConversationById(id);
+export async function deleteConversation(id: number, ownerUserId?: string): Promise<ConversationRecord | null> {
+  const conversation = await getConversationById(id, ownerUserId);
   if (!conversation) return null;
 
   if (isUsingLocalDb()) {
@@ -492,7 +516,9 @@ export async function deleteConversation(id: number): Promise<ConversationRecord
   }
 
   const supabase = getSupabaseClient();
-  const { error } = await supabase.from('conversations').delete().eq('id', id);
+  let query = supabase.from('conversations').delete().eq('id', id);
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { error } = await query;
   if (error) throw error;
   return conversation;
 }
@@ -834,32 +860,36 @@ export async function upsertArchiveIntelligenceProfile(
   return data;
 }
 
-export async function countArchives(): Promise<number> {
+export async function countArchives(ownerUserId?: string): Promise<number> {
   if (isUsingLocalDb()) {
     const state = await loadLocalDb();
-    return state.archives.length;
+    return state.archives.filter((archive) => !ownerUserId || archive.owner_user_id === ownerUserId).length;
   }
 
   const supabase = getSupabaseClient();
-  const { count, error } = await supabase
+  let query = supabase
     .from('archives')
     .select('*', { count: 'exact', head: true });
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { count, error } = await query;
 
   if (error) throw error;
   return count || 0;
 }
 
-export async function countConversationsByArchiveId(archiveId: number): Promise<number> {
+export async function countConversationsByArchiveId(archiveId: number, ownerUserId?: string): Promise<number> {
   if (isUsingLocalDb()) {
     const state = await loadLocalDb();
-    return state.conversations.filter((conversation) => conversation.archive_id === archiveId).length;
+    return state.conversations.filter((conversation) => conversation.archive_id === archiveId && (!ownerUserId || conversation.owner_user_id === ownerUserId)).length;
   }
 
   const supabase = getSupabaseClient();
-  const { count, error } = await supabase
+  let query = supabase
     .from('conversations')
     .select('*', { count: 'exact', head: true })
     .eq('archive_id', archiveId);
+  if (ownerUserId) query = query.eq('owner_user_id', ownerUserId);
+  const { count, error } = await query;
 
   if (error) throw error;
   return count || 0;

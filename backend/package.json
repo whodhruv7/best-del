@@ -23,6 +23,7 @@
     "smoke:provider-route-semantics": "tsx scripts/smoke-test-provider-route-semantics.ts",
     "smoke:core-generation-budget": "tsx scripts/smoke-test-core-generation-budget.ts",
     "smoke:provider-fallback": "tsx scripts/smoke-test-provider-fallback.ts",
+    "smoke:user-isolation": "tsx scripts/smoke-test-user-isolation.ts",
     "smoke:live-fast-research": "tsx scripts/smoke-test-live-fast-research.ts",
     "smoke:live-retrieval-contract": "tsx scripts/smoke-test-live-retrieval-contract.ts",
     "smoke:fast-research-local": "tsx scripts/smoke-test-fast-research-local.ts",

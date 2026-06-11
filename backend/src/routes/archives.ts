@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { 
+import {
   listArchives as listArchivesDb, 
   createArchive as createArchiveDb, 
   updateArchive as updateArchiveDb,
@@ -17,6 +17,7 @@ import {
   type ArchiveRecord
 } from "../db.js";
 import { getGeminiClient, isGeminiEnabled } from "../lib/gemini-client.js";
+import { getRequestOwnerId } from "../lib/request-auth.js";
 
 export type { ArchiveRecord, ApiArchiveRecord };
 
@@ -47,12 +48,12 @@ type AnglesMeta = {
 };
 
 export interface ArchivesStore {
-  listArchives(): Promise<ArchiveRecordWithAngles[]>;
-  createArchive(input: CreateArchiveInput): Promise<ApiArchiveRecord>;
-  updateArchive(id: number, input: UpdateArchiveInput): Promise<ApiArchiveRecord | null>;
+  listArchives(ownerUserId: string): Promise<ArchiveRecordWithAngles[]>;
+  createArchive(input: CreateArchiveInput, ownerUserId: string): Promise<ApiArchiveRecord>;
+  updateArchive(id: number, input: UpdateArchiveInput, ownerUserId: string): Promise<ApiArchiveRecord | null>;
   getResearchAngles(id: number): Promise<{ archiveId: number; angles: string[]; meta: AnglesMeta } | null>;
-  setResearchAngles(id: number, angles: string[], meta?: AnglesMeta): Promise<{ archiveId: number; angles: string[]; meta: AnglesMeta } | null>;
-  deleteArchiveIfSafe(id: number): Promise<DeleteArchiveIfSafeResult>;
+  setResearchAngles(id: number, angles: string[], meta: AnglesMeta | undefined, ownerUserId: string): Promise<{ archiveId: number; angles: string[]; meta: AnglesMeta } | null>;
+  deleteArchiveIfSafe(id: number, ownerUserId: string): Promise<DeleteArchiveIfSafeResult>;
 }
 
 const CreateArchiveBody = z.object({
@@ -154,8 +155,8 @@ async function generateAngles(topic: string, committee?: string): Promise<{ angl
 }
 
 const supabaseArchivesStore: ArchivesStore = {
-  async listArchives() {
-    const rows = await listArchivesDb();
+  async listArchives(ownerUserId) {
+    const rows = await listArchivesDb(ownerUserId);
     const anglesByArchiveId = new Map(
       (await listArchiveResearchAngles(rows.map((row) => row.id)))
         .map((angles) => [angles.archive_id, angles] as const),
@@ -168,9 +169,9 @@ const supabaseArchivesStore: ArchivesStore = {
       };
     });
   },
-  async createArchive(input) {
+  async createArchive(input, ownerUserId) {
     try {
-      const archive = await createArchiveDb(input.name, input.topic);
+      const archive = await createArchiveDb(input.name, input.topic, ownerUserId);
       void upsertArchiveResearchAngles(archive.id, [], {}).catch((err) => {
         console.error("[archives] Failed to initialize research angles:", err);
       });
@@ -180,8 +181,8 @@ const supabaseArchivesStore: ArchivesStore = {
       throw err;
     }
   },
-  async updateArchive(id, input) {
-    const updated = await updateArchiveDb(id, input);
+  async updateArchive(id, input, ownerUserId) {
+    const updated = await updateArchiveDb(id, input, ownerUserId);
     return updated ? toApiArchive(updated) : null;
   },
   async getResearchAngles(id) {
@@ -193,23 +194,23 @@ const supabaseArchivesStore: ArchivesStore = {
       meta: parseMeta(row.meta_json) 
     };
   },
-  async setResearchAngles(id, angles, meta) {
-    const archive = await getArchiveById(id);
+  async setResearchAngles(id, angles, meta, ownerUserId) {
+    const archive = await getArchiveById(id, ownerUserId);
     if (!archive) return null;
     const result = await upsertArchiveResearchAngles(id, angles.slice(0, 20), meta ?? {});
     return { archiveId: id, angles: angles.slice(0, 20), meta: meta ?? {} };
   },
-  async deleteArchiveIfSafe(id) {
-    const archive = await getArchiveById(id);
+  async deleteArchiveIfSafe(id, ownerUserId) {
+    const archive = await getArchiveById(id, ownerUserId);
     if (!archive) return { status: "not_found" as const };
 
-    const archiveCount = await countArchives();
+    const archiveCount = await countArchives(ownerUserId);
     if (archiveCount <= 1) return { status: "last_archive" as const };
 
-    const conversationCount = await countConversationsByArchiveId(id);
+    const conversationCount = await countConversationsByArchiveId(id, ownerUserId);
     if (conversationCount > 0) return { status: "has_conversations" as const };
 
-    await deleteArchive(id);
+    await deleteArchive(id, ownerUserId);
     return { status: "deleted" as const, archive: { ...toApiArchive(archive), researchAngles: [] } };
   },
 };
@@ -217,8 +218,8 @@ const supabaseArchivesStore: ArchivesStore = {
 export function createArchivesRouter(store: ArchivesStore = supabaseArchivesStore) {
   const router = Router();
 
-  router.get("/archives", async (_req, res) => {
-    const rows = await store.listArchives();
+  router.get("/archives", async (req, res) => {
+    const rows = await store.listArchives(getRequestOwnerId(req));
     res.json({ archives: rows });
   });
 
@@ -231,7 +232,7 @@ export function createArchivesRouter(store: ArchivesStore = supabaseArchivesStor
 
     try {
       const archiveInput = parsed.data as CreateArchiveInput;
-      const archive = await store.createArchive(archiveInput);
+      const archive = await store.createArchive(archiveInput, getRequestOwnerId(req));
       res.status(201).json(archive);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -260,7 +261,7 @@ export function createArchivesRouter(store: ArchivesStore = supabaseArchivesStor
 
     try {
       const updateInput = body.data as UpdateArchiveInput;
-      const updated = await store.updateArchive(params.data.id, updateInput);
+      const updated = await store.updateArchive(params.data.id, updateInput, getRequestOwnerId(req));
       if (!updated) {
         res.status(404).json({ error: "Archive not found" });
         return;
@@ -281,7 +282,7 @@ export function createArchivesRouter(store: ArchivesStore = supabaseArchivesStor
     }
 
     try {
-      const result = await store.deleteArchiveIfSafe(params.data.id);
+      const result = await store.deleteArchiveIfSafe(params.data.id, getRequestOwnerId(req));
       if (result.status === "deleted") {
         res.status(204).end();
         return;
@@ -307,6 +308,11 @@ export function createArchivesRouter(store: ArchivesStore = supabaseArchivesStor
       res.status(400).json({ error: "Invalid id" });
       return;
     }
+    const archive = await getArchiveById(params.data.id, getRequestOwnerId(req));
+    if (!archive) {
+      res.status(404).json({ error: "Archive not found" });
+      return;
+    }
     const found = await store.getResearchAngles(params.data.id);
     if (!found) {
       res.status(404).json({ error: "Archive not found" });
@@ -326,11 +332,16 @@ export function createArchivesRouter(store: ArchivesStore = supabaseArchivesStor
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
+    const archive = await getArchiveById(params.data.id, getRequestOwnerId(req));
+    if (!archive) {
+      res.status(404).json({ error: "Archive not found" });
+      return;
+    }
     const updated = await store.setResearchAngles(params.data.id, body.data.angles, {
       generatedAt: new Date().toISOString(),
       model: "user-edited",
       version: "v1",
-    });
+    }, getRequestOwnerId(req));
     if (!updated) {
       res.status(404).json({ error: "Archive not found" });
       return;
@@ -349,14 +360,14 @@ export function createArchivesRouter(store: ArchivesStore = supabaseArchivesStor
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
-    const archive = await getArchiveById(params.data.id);
+    const archive = await getArchiveById(params.data.id, getRequestOwnerId(req));
     if (!archive) {
       res.status(404).json({ error: "Archive not found" });
       return;
     }
     const topic = body.data.topic?.trim() || archive.topic;
     const generated = await generateAngles(topic, body.data.committee);
-    const saved = await store.setResearchAngles(params.data.id, generated.angles, generated.meta);
+    const saved = await store.setResearchAngles(params.data.id, generated.angles, generated.meta, getRequestOwnerId(req));
     res.json(saved);
   });
 
